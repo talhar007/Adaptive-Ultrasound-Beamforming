@@ -1,0 +1,65 @@
+#!/bin/bash
+# ============================================================
+# LSF job script for ABLE++ training on the Makalu cluster
+# Submit with:  bsub < submit_job.lsf
+# Monitor with: python status.py
+# Kill with:    bkill <jobid>
+# ============================================================
+
+# ---- Job identity ----
+#BSUB -J able_plus_plus
+#BSUB -o checkpoints/lsf_%J.out
+#BSUB -e checkpoints/lsf_%J.err
+
+# ---- Queue and resources ----
+#BSUB -q BatchGPU
+#BSUB -n 4
+#BSUB -R "rusage[mem=16000]"
+#BSUB -gpu "num=1:mode=exclusive_process:mps=no"
+#BSUB -W 72:00
+
+# ---- Notifications ----
+#BSUB -B
+#BSUB -N
+
+# ============================================================
+set -euo pipefail
+
+echo "Job  : $LSB_JOBID  on $(hostname) at $(date)"
+echo "Queue: $LSB_QUEUE"
+echo "Cores: $LSB_DJOB_NUMPROC"
+
+module purge
+module load cuda/v12.2
+
+source "$HOME/able_env/bin/activate"
+
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
+
+PROJECT_DIR="$HOME/Documents/Research Project"
+cd "$PROJECT_DIR"
+mkdir -p checkpoints
+
+# ============================================================
+# Launch training — MLP-only, forward model is fixed physics
+#   --n_steps 5000        : total training steps
+#   --batch_size 4        : increase if GPU VRAM allows
+#   --scatterer_type mixed: diverse data for generalization
+#   --M 64                : array elements (supervisor notebook)
+#   --nx 128 --nz 128     : imaging grid
+# ============================================================
+python run_training.py \
+    --n_steps        5000       \
+    --batch_size     4          \
+    --lr             1e-3       \
+    --lam            0.8        \
+    --noise_level    0.05       \
+    --scatterer_type mixed      \
+    --M              64         \
+    --nx             128        \
+    --nz             128        \
+    --log_interval   20         \
+    --ckpt_interval  200        \
+    --checkpoint_dir checkpoints
+
+echo "Job finished at $(date)"

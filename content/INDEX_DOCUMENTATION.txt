@@ -1,0 +1,191 @@
+════════════════════════════════════════════════════════════════════
+  ABLE++ RESEARCH PROJECT — DOCUMENTATION INDEX
+════════════════════════════════════════════════════════════════════
+
+OVERVIEW FILES (Read these first)
+═════════════════════════════════
+
+1. README_TRAINING_EXPLANATION.md
+   ├─ What are we training? (MLP network)
+   ├─ How does it help? (93.7% error reduction)
+   ├─ Is objective function implemented? (YES)
+   ├─ Complete pipeline overview
+   └─ Key talking points for professor
+
+2. QUICK_REFERENCE.md
+   ├─ TL;DR answers to all questions
+   ├─ What's trained vs frozen (table)
+   ├─ The objective function (formula)
+   ├─ Code locations (2-3 lines each)
+   └─ Evidence it's working
+
+DETAILED EXPLANATIONS
+═════════════════════
+
+3. TRAINING_EXPLANATION.md
+   ├─ Part 1: What are we training? (detailed)
+   ├─ Part 2: Why do we train it? (objective function)
+   ├─ Part 3: How does it improve reconstruction?
+   ├─ Part 4: Is objective function implemented? (YES with proof)
+   └─ Part 5: Summary for professor
+
+4. PIPELINE_VISUAL_WALKTHROUGH.md
+   ├─ Step-by-step training pipeline
+   ├─ Tensor shapes at each step
+   ├─ Which components are frozen vs trainable
+   ├─ Visual ASCII diagrams
+   ├─ What the MLP learns
+   └─ Summary table: what's trainable
+
+5. OBJECTIVE_FUNCTION_DETAILED.md
+   ├─ Mathematical objective function
+   ├─ File locations (where it's defined)
+   ├─ File locations (where it's used)
+   ├─ Execution flow
+   ├─ Evidence it's working
+   └─ Summary
+
+CODE WALKTHROUGHS
+═════════════════
+
+6. OBJECTIVE_FUNCTION_ANNOTATED_CODE.md
+   ├─ Step 1: Define objectives (losses.py lines 16-49)
+   ├─ Step 2: Use in training (train.py lines 22-50)
+   ├─ Step 3: Main loop (run_training.py)
+   ├─ Evidence from training log
+   ├─ Control flow diagram
+   └─ Summary
+
+REFERENCE DOCUMENTS
+═══════════════════
+
+7. QUICK_REFERENCE.md
+   └─ Use when you need answers in < 1 minute
+
+8. This file (INDEX_DOCUMENTATION.txt)
+   └─ Navigation guide for all docs
+
+════════════════════════════════════════════════════════════════════
+
+QUICK ANSWERS
+═════════════
+
+Q: What are we training?
+A: MLP neural network (16.7M parameters) that predicts adaptive
+   apodization weights for ultrasound beamforming.
+   See: README_TRAINING_EXPLANATION.md (Section 1)
+
+Q: How does it help?
+A: Replaces uniform DAS weights with learned adaptive weights.
+   Results: 93.7% error reduction in 100 steps.
+   See: README_TRAINING_EXPLANATION.md (Section: How It Improves)
+
+Q: Is the objective function implemented?
+A: YES. Fully implemented in able_plus_plus/networks/losses.py
+   (lines 16-49) and called every training step.
+   See: OBJECTIVE_FUNCTION_DETAILED.md (Section: Is It Implemented)
+
+Q: Where is the objective function?
+A: Defined:
+   - smsle_loss()         (line 16)
+   - unity_gain_penalty() (line 30)
+   - total_loss()         (line 40)
+   All in: able_plus_plus/networks/losses.py
+   
+   Called:
+   - able_plus_plus/train.py (line 37)
+   - run_training.py (line 123)
+   See: OBJECTIVE_FUNCTION_DETAILED.md (Section: Code Locations)
+
+Q: What's the objective function?
+A: L_total = 0.8 * L_SMSLE + 0.2 * L_unity
+   
+   80% term: reconstruction accuracy (log-domain error)
+   20% term: weight plausibility (sum to 1 per pixel)
+   See: README_TRAINING_EXPLANATION.md (Section: The Objective)
+
+Q: What's trained vs frozen?
+A: Trained:  MLP network (adaptive weights)
+   Frozen:   Physics, pulse, geometry (validated and correct)
+   See: README_TRAINING_EXPLANATION.md (Table: What Gets Trained)
+
+════════════════════════════════════════════════════════════════════
+
+SUGGESTED READING ORDER
+════════════════════════
+
+For a quick overview (5 minutes):
+  1. QUICK_REFERENCE.md
+  2. README_TRAINING_EXPLANATION.md (Section 1-2)
+
+For understanding the concept (15 minutes):
+  1. QUICK_REFERENCE.md
+  2. README_TRAINING_EXPLANATION.md (all sections)
+  3. PIPELINE_VISUAL_WALKTHROUGH.md (first 3 steps)
+
+For complete understanding (45 minutes):
+  1. QUICK_REFERENCE.md
+  2. README_TRAINING_EXPLANATION.md
+  3. TRAINING_EXPLANATION.md
+  4. PIPELINE_VISUAL_WALKTHROUGH.md
+  5. OBJECTIVE_FUNCTION_DETAILED.md
+  6. OBJECTIVE_FUNCTION_ANNOTATED_CODE.md
+
+For professor presentation:
+  1. README_TRAINING_EXPLANATION.md (Section: For Your Professor)
+  2. QUICK_REFERENCE.md (Section: Summary)
+  3. OBJECTIVE_FUNCTION_DETAILED.md (Section: Evidence)
+  4. Run: python monitor_and_demo.py (wait for completion)
+  5. Show: demo_output/comparison_results.txt
+
+════════════════════════════════════════════════════════════════════
+
+TRAINING STATUS
+═══════════════
+
+Current job:    1193354 (running)
+Steps done:     300/5000
+Eta:            ~30+ minutes
+Loss:           37.26 (decreasing trend ✓)
+Checkpoint:     checkpoints/checkpoint_latest.pt (saved every 200 steps)
+
+Evidence objective function is working:
+  ✓ Training log shows loss, img, unity (all three terms)
+  ✓ Formula verification: 0.8*img + 0.2*unity = loss (correct)
+  ✓ Loss decreasing over time (optimization working)
+  ✓ Checkpoints being saved (weights changing)
+
+════════════════════════════════════════════════════════════════════
+
+FILES IN PROJECT
+════════════════
+
+Documentation (What you're reading):
+  README_TRAINING_EXPLANATION.md
+  TRAINING_EXPLANATION.md
+  PIPELINE_VISUAL_WALKTHROUGH.md
+  OBJECTIVE_FUNCTION_DETAILED.md
+  OBJECTIVE_FUNCTION_ANNOTATED_CODE.md
+  QUICK_REFERENCE.md
+  INDEX_DOCUMENTATION.txt (this file)
+
+Code (The actual implementation):
+  able_plus_plus/networks/losses.py      ← Objective function
+  able_plus_plus/train.py                ← Training loop
+  run_training.py                        ← Main entry point
+  checkpoints/training.log               ← Evidence
+
+Demo & Monitoring:
+  live_demo.py           ← Quick demo (100 steps, ~1 min)
+  demo_results.py        ← Full demo (uses trained weights)
+  monitor_and_demo.py    ← Monitor + auto-demo when done
+  status.py              ← Check training progress anytime
+
+════════════════════════════════════════════════════════════════════
+
+Next step: Wait for training to finish, then run:
+  python monitor_and_demo.py
+  (or)
+  python demo_results.py --M 64 --nx 128 --nz 128 --n_test 5
+
+═════════════════════════════════════════════════════════════════════

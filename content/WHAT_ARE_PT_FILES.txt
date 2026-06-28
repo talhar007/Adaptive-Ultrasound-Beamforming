@@ -1,0 +1,56 @@
+WHAT ARE .PT FILES?
+═══════════════════════════════════════════════════════════════
+
+.pt files are PyTorch tensor storage files. They store raw numerical data
+in binary format.
+
+In demo_results.py, the script was creating:
+  - case_01_tensors.pt
+  - case_02_tensors.pt
+  - case_03_tensors.pt
+
+These files contained:
+  • Ground truth image data
+  • DAS reconstruction result
+  • FISTA reconstruction result
+  • ABLE reconstruction result
+  • Metrics (MAE values)
+
+WHY WERE THEY CREATED?
+─────────────────────────────────────────────────────────────
+
+For further analysis. If you wanted to:
+  • Do additional statistical analysis
+  • Load results into Jupyter notebook for analysis
+  • Process results with custom scripts
+  • Compare with other methods using the raw data
+
+Then you'd want these .pt files.
+
+BUT FOR YOUR PRESENTATION:
+─────────────────────────────────────────────────────────────
+
+You DON'T NEED .pt files. They're not helpful for explaining.
+
+What you actually need:
+  ✓ PNG images (demo_output/case_0X_reconstruction.png)
+  ✓ Text metrics (demo_output/comparison_results.txt)
+  ✓ Training log (checkpoints/training.log)
+
+FIX APPLIED:
+─────────────────────────────────────────────────────────────
+
+demo_results.py has been updated:
+  • .pt file saving is NOW DISABLED by default
+  • If you ever need .pt files, uncomment line 312 in demo_results.py
+
+So when you run: python demo_results.py
+You'll only get:
+  ✓ comparison_results.txt (metrics)
+  ✓ case_0X_reconstruction.png (images)
+
+No more unnecessary .pt files cluttering your output folder!
+
+═══════════════════════════════════════════════════════════════
+
+That's it. You can ignore .pt files entirely.
