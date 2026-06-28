@@ -12,7 +12,6 @@ Architecture (Luijten et al. Fig. 2, Sec. III-A/B, Eq. 14):
     FC(2N/4 -> N/4) -> AntiRectifier -> Dropout
     FC(2N/4 -> N/4) -> AntiRectifier -> Dropout
     FC(2N/4 -> N)   -> output weights
-
 The AntiRectifier doubles width after each hidden layer (hence 2*h inputs
 for layers 2-4), creating an encoder-decoder bottleneck at N/4 that forces
 a compact representation and regularises the predicted weights.
