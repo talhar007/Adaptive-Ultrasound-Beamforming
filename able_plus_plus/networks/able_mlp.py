@@ -33,14 +33,21 @@ class AntiRectifier(nn.Module):
         x = x / (x.norm(p=2, dim=-1, keepdim=True) + 1e-8)
         return torch.cat([torch.relu(x), torch.relu(-x)], dim=-1)
 
-
+# the network itself: a 4-layer fully-connected encoder–decoder, 4096 → 1024 → 1024 → 1024 → 4096 (~16.8M parameters). Per pixel, it takes the 64×64 = 4096 delay-aligned channel-pair samples and outputs 4096 apodization weights.
 class ABLEMLP(nn.Module):
     """4-layer FC encoder-decoder with AntiRectifier activations.
 
     N   = M*M = number of channel pairs (e.g. 4096 for M=64)
     N/4 = bottleneck width (1024 for M=64)
+
+    dropout defaults to 0: training data is synthesized fresh every step
+    (infinite data — overfitting is impossible), and dropout was found to
+    create a severe train/eval mismatch: with p=0.2 the unity-gain
+    constraint was satisfied only WITH dropout noise active, and at eval
+    time the per-pixel weight sums collapsed from ~1 to ~0, distorting
+    reconstructed amplitudes.
     """
-    def __init__(self, N, dropout=0.2):
+    def __init__(self, N, dropout=0.0):
         super().__init__()
         h = max(N // 4, 1)
         self.fc1 = nn.Linear(N,     h)       # encoder:  N   -> N/4
@@ -51,15 +58,23 @@ class ABLEMLP(nn.Module):
         self.drop = nn.Dropout(dropout)
 
     def forward(self, y):
-        """y: [B*P, N]  ->  w_rx: [B*P, N]  (apodization weights per pixel)"""
+        """y: [B*P, N]  ->  w_rx: [B*P, N]  (apodization weights per pixel)
+
+        The output layer is LINEAR — no softmax / ReLU / GELU. Adaptive
+        beamforming weights must be able to go negative to place nulls on
+        clutter and sidelobes (cf. minimum-variance weights); softmax made
+        every weight positive and, over N=4096 near-equal logits, collapsed
+        to the uniform 1/N distribution — i.e. exactly DAS, which is why
+        ABLE and DAS reconstructions were indistinguishable. Unity gain
+        (sum of weights ~ 1) is enforced softly by the loss instead
+        (Luijten et al. Eq. 15), not baked into the architecture.
+        """
         x = self.drop(self.act(self.fc1(y)))
         x = self.drop(self.act(self.fc2(x)))
         x = self.drop(self.act(self.fc3(x)))
-        x = self.fc4(x)
-        # Softmax to ensure: all weights > 0, sum = 1.0 per pixel
-        return torch.softmax(x, dim=-1)
+        return self.fc4(x)
 
-
+# This is where DAS's uniform sum gets replaced by the learned weighted sum.
 def beamform_weighted(pre_summed_pixels, weights):
     """Weighted sum of per-channel-pair contributions  (Eq. 13 generalised).
 
@@ -81,6 +96,12 @@ def apply_mlp(mlp, pre_summed):
     """
     B, MM, P = pre_summed.shape
     x       = pre_summed.permute(0, 2, 1).reshape(B * P, MM)   # [B*P, M*M]
-    weights = mlp(x)                                            # [B*P, M*M]
+    # Predict weights from a per-pixel peak-normalized copy: apodization
+    # should depend on the pattern across channel pairs, not the absolute
+    # amplitude (which spans orders of magnitude with depth via 1/r gain).
+    # The weighted sum below still uses the raw x, so the reconstruction
+    # keeps its physical scale.
+    x_in    = x / (x.abs().amax(dim=-1, keepdim=True) + 1e-12)
+    weights = mlp(x_in)                                         # [B*P, M*M]
     p_recon = beamform_weighted(x, weights).reshape(B, P)       # [B, P]
     return p_recon, weights, x

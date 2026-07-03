@@ -155,3 +155,46 @@ class ForwardModel(nn.Module):
 
         das_image = pre_summed.sum(dim=1)   # uniform weights -> DAS  [B, nx*nz]
         return das_image, pre_summed
+
+    # ------------------------------------------------------------------
+    # 3. True adjoint of simulate  (for iterative solvers like FISTA)
+    # ------------------------------------------------------------------
+    def simulate_adjoint(self, rf_data):
+        """True mathematical adjoint of simulate(): matched filter + DAS.
+
+        simulate() applies scatter_add then conv1d(pulse). The adjoint
+        must reverse both: corr(rf, pulse) = conv1d(rf, flip(pulse)) first,
+        then gather with the same delay/gain weights.
+
+        das_adjoint() skips the pulse correlation (intentionally, because
+        the MLP was trained on those unfiltered pre_summed values). Using
+        das_adjoint as the FISTA gradient gives a 60% inner-product
+        mismatch, causing guaranteed divergence. This method passes the
+        adjoint test and is used only by FISTA.
+
+        Returns: image [B, nx*nz]  (no pre_summed — FISTA does not need it)
+        """
+        B, M, T = rf_data.shape
+        MM = M * M
+
+        # Cross-correlate each receive channel with the pulse (adjoint of conv1d)
+        pl = self.base_pulse.flip(0).view(1, 1, -1)
+        pl_exp = pl.expand(B * M, 1, -1).contiguous()
+        rf_mf = F.conv1d(
+            rf_data.reshape(1, B * M, T),
+            pl_exp,
+            padding=pl.shape[-1] // 2,
+            groups=B * M,
+        ).view(B, M, -1)[..., :self.buffer_len]
+
+        # Gather delay-compensated samples (same indices / weights as das_adjoint)
+        v = rf_mf.new_zeros(B, MM, self.buffer_len)
+        v[:, :, :rf_mf.shape[-1]] = (
+            rf_mf.unsqueeze(2)
+                 .expand(-1, -1, self.M, -1)
+                 .reshape(B, MM, -1)
+        )
+        val_f = torch.gather(v, 2, self.idx_floor.unsqueeze(0).expand(B, -1, -1))
+        val_c = torch.gather(v, 2, self.idx_ceil.unsqueeze(0).expand(B, -1, -1))
+        pre   = val_f * self.w_floor.unsqueeze(0) + val_c * self.w_ceil.unsqueeze(0)
+        return pre.sum(dim=1)   # [B, nx*nz]

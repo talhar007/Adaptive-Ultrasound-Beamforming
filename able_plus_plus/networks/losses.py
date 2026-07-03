@@ -15,28 +15,56 @@ import torch
 
 
 def smsle_loss(p_pred, p_target, eps=1e-6):
-    """Signed-Mean-Squared-Logarithmic-Error.
+    """Signed-Mean-Squared-Logarithmic-Error on peak-normalized images,
+    class-balanced between scatterer and background pixels.
 
-    Splits data into positive/negative halves and compares in the log domain,
-    matching how ultrasound B-mode images are compressed for display without
-    discarding the bipolar RF sign information.
+    Both images are normalized per sample by their own peak |amplitude|
+    before the log-domain comparison — the SAME normalization the
+    evaluation / demo pipeline applies to GT, DAS, FISTA and ABLE maps, so
+    the training objective and the reported MAE live on one common scale.
 
-    p_pred, p_target: any broadcastable shape (typically [B, nx*nz])
+    Class balancing: a sparse field has ~3-20 scatterer pixels against
+    ~16k background pixels. A plain mean over pixels is >99.9% background,
+    so the optimizer learns that crushing weak scatterers to zero is a
+    profitable trade for slightly cleaner background — which showed up as
+    "missing" points in the reconstructions. Averaging the scatterer and
+    background pools separately (50/50) makes deleting a true scatterer
+    exactly as expensive as hallucinating a false one.
+
+    p_pred, p_target: [B, nx*nz]
     """
-    pred_pos, pred_neg = torch.relu(p_pred),  torch.relu(-p_pred)
-    targ_pos, targ_neg = torch.relu(p_target), torch.relu(-p_target)
+    pred_scale = p_pred.abs().amax(dim=-1, keepdim=True).clamp(min=eps)
+    targ_scale = p_target.abs().amax(dim=-1, keepdim=True).clamp(min=eps)
 
-    loss_pos = (torch.log10(pred_pos + eps) - torch.log10(targ_pos + eps)).pow(2).mean()
-    loss_neg = (torch.log10(pred_neg + eps) - torch.log10(targ_neg + eps)).pow(2).mean()
-    return 0.5 * (loss_pos + loss_neg)
+    p_pred_norm = p_pred / pred_scale
+    p_target_norm = p_target / targ_scale
+
+    pred_pos, pred_neg = torch.relu(p_pred_norm), torch.relu(-p_pred_norm)
+    targ_pos, targ_neg = torch.relu(p_target_norm), torch.relu(-p_target_norm)
+
+    sq = 0.5 * ((torch.log10(pred_pos + eps) - torch.log10(targ_pos + eps)).pow(2)
+                + (torch.log10(pred_neg + eps) - torch.log10(targ_neg + eps)).pow(2))
+
+    fg = p_target.abs() > 0
+    n_fg = fg.sum()
+    if n_fg == 0 or n_fg == fg.numel():
+        return sq.mean()
+    loss_fg = sq[fg].mean()
+    loss_bg = sq[~fg].mean()
+    return 0.5 * (loss_fg + loss_bg)
 
 
 def unity_gain_penalty(weights):
     """Apodization weights should sum to ~1 per pixel (distortionless response).
 
+    With the linear MLP output this is the only thing anchoring the weight
+    scale, so it must NOT be shrunk by 1/N — dividing by N=M*M=4096 inside
+    the square scaled the penalty by ~6e-8 and made it a no-op.
+
     weights: [B*P, M*M]  — sum over the channel-pair dimension (last dim)
     """
-    return (weights.sum(dim=-1) - 1.0).pow(2).mean()
+    weight_sums = weights.sum(dim=-1)  # [B*P]
+    return (weight_sums - 1.0).pow(2).mean()
 
 
 def total_loss(p_pred, p_target, weights, lam=0.8):
