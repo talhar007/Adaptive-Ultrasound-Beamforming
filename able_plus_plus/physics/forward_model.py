@@ -85,6 +85,13 @@ class ForwardModel(nn.Module):
             self.register_buffer('w_floor',   w_f)
             self.register_buffer('w_ceil',    w_c)
 
+            # Raw float delays (samples) and gains, kept for the
+            # learnable-TX path (das_adjoint_tx), which must recompute the
+            # interpolation from geo_delay + tau each forward pass so that
+            # gradients can reach the learned delays.
+            self.register_buffer('geo_delay', geo_flat)              # [M*M, P]
+            self.register_buffer('gain',      gain_flat)             # [M*M, P]
+
         self.register_buffer('base_pulse',
                              build_base_pulse(fc, fs, device=device))
 
@@ -117,6 +124,66 @@ class ForwardModel(nn.Module):
         # index order: spike was [B, M*M, T] with M*M = rx*M + tx
         # so reshape to [B, M_rx, M_tx, T] and sum over M_tx (dim=2)
         conv = conv.view(B, self.M, self.M, -1)[:, :, :, :self.buffer_len]
+        return conv.sum(dim=2)                                     # [B, M_rx, N_t]
+
+    # ------------------------------------------------------------------
+    # 1b. Forward model with learnable TRANSMIT apodization + delays
+    # ------------------------------------------------------------------
+    def simulate_tx(self, scatterer_maps, w_tx=None, tau_tx=None):
+        """Physics simulation with per-element transmit parameters applied
+        ON TRANSMIT — before the wave leaves the array, where they belong
+        physically: element tx fires with amplitude w_tx[tx] and a firing
+        delay of tau_tx[tx] samples, so every echo it produces is scaled
+        and time-shifted at the SOURCE. This is the ABLE++ acquisition;
+        reconstruction afterwards uses the ordinary (frozen) das_adjoint.
+
+        Differentiable w.r.t. both parameters: the firing delay enters the
+        spike times through geo_delay + tau, and the gradient survives
+        through the linear-interpolation fraction (the gather/scatter
+        indices are detached), exactly the mechanism of a fractional-delay
+        filter. With w_tx=None, tau_tx=None this reproduces simulate()
+        bit-for-bit.
+
+        scatterer_maps: [B, nx*nz]
+        w_tx:           [M] transmit apodization (or None)
+        tau_tx:         [M] transmit firing delays in SAMPLES (or None)
+        returns:        rf_data [B, M_rx, N_t]
+        """
+        B  = scatterer_maps.shape[0]
+        M  = self.M
+        MM = M * M
+        buf = self.buffer_len
+
+        t = self.geo_delay
+        if tau_tx is not None:
+            # pair index = rx*M + tx -> broadcast the firing delay over rx
+            t = (t.view(M, M, -1) + tau_tx.view(1, M, 1)).reshape(MM, -1)
+
+        gain = self.gain
+        if w_tx is not None:
+            gain = (gain.view(M, M, -1) * w_tx.view(1, M, 1)).reshape(MM, -1)
+
+        idx_f = t.detach().floor().long()
+        idx_c = idx_f + 1
+        frac  = t - idx_f.float()                 # d(frac)/d(tau) = 1
+        valid = ((idx_f >= 0) & (idx_c < buf)).float()
+        w_f = (1.0 - frac) * gain * valid
+        w_c =        frac  * gain * valid
+        idx_f = idx_f.clamp(0, buf - 1)
+        idx_c = idx_c.clamp(0, buf - 1)
+
+        img   = scatterer_maps.unsqueeze(1).expand(-1, MM, -1)    # [B, MM, P]
+        spike = scatterer_maps.new_zeros(B, MM, buf)
+        # out-of-place scatter_add keeps the autograd graph clean
+        spike = spike.scatter_add(2, idx_f.unsqueeze(0).expand(B, -1, -1),
+                                  img * w_f.unsqueeze(0))
+        spike = spike.scatter_add(2, idx_c.unsqueeze(0).expand(B, -1, -1),
+                                  img * w_c.unsqueeze(0))
+
+        spike = spike.reshape(1, B * MM, buf)
+        pk    = self.base_pulse.view(1, 1, -1).expand(B * MM, 1, -1).contiguous()
+        conv  = F.conv1d(spike, pk, padding=pk.shape[-1] // 2, groups=B * MM)
+        conv  = conv.view(B, M, M, -1)[:, :, :, :buf]
         return conv.sum(dim=2)                                     # [B, M_rx, N_t]
 
     # ------------------------------------------------------------------

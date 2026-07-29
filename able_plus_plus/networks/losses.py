@@ -67,16 +67,69 @@ def unity_gain_penalty(weights):
     return (weight_sums - 1.0).pow(2).mean()
 
 
-def total_loss(p_pred, p_target, weights, lam=0.8):
-    """L_total = lambda * L_SMSLE + (1 - lambda) * L_unity  (Eq. 15)
+def background_power(p_pred, p_target, eps=1e-6):
+    """Linear-domain background energy: mean squared (peak-normalized)
+    amplitude on pixels where the ground truth is empty.
+
+    SMSLE compares in the LOG domain, so residual clutter at, say, 1% of
+    peak is nearly free there — yet it is exactly what the reported CNR
+    and PSNR punish. This term aligns training with those metrics: it
+    charges linear-scale energy for anything reconstructed where nothing
+    exists. Weighted by lam_bg in total_loss (0 = off, keeps the paper's
+    objective untouched).
+    """
+    scale = p_pred.abs().amax(dim=-1, keepdim=True).clamp(min=eps)
+    norm = p_pred / scale
+    bg = p_target.abs() <= 0
+    if bg.sum() == 0:
+        return p_pred.new_zeros(())
+    return norm[bg].pow(2).mean()
+
+
+def tx_smoothness_loss(w_tx, tau_tx, max_delay):
+    """Total-variation penalty across element index on the learned transmit
+    apodization and firing delays — discourages the jagged, element-to-
+    element sign-flipping solution the optimizer finds when nothing
+    constrains it (confirmed on checkpoints_pp5: roughness = mean(diff^2)/
+    var of the learned w_tx/tau_tx was 2.32/2.20, ROUGHER than i.i.d. random
+    noise (1.72) and ~200x rougher than a smooth Hann taper (0.01)).
+
+    Rationale (classical array/beamforming theory): aperture-weighting
+    smoothness directly controls transmit sidelobe level — it's why real
+    apodization windows (Hann, Hamming, Tukey) are always smooth functions
+    of element position. An unconstrained per-element w_tx/tau_tx has no
+    reason to stay smooth; the resulting excess sidelobe energy is
+    invisible on isolated scatterers (lands on background, which lam_bg
+    suppresses hard) but shows up as visible clutter between CLOSE
+    scatterers, where sidelobe leakage from one point lands on a real
+    neighboring echo and can't be suppressed without risking the signal.
+
+    tau_tx's term is normalized by max_delay^2 so it sits on the same O(1)
+    scale as w_tx's term (already bounded via tanh to (-1,1)), keeping one
+    lam_tx_smooth weight meaningful regardless of the configured bound.
+    """
+    w_term = (w_tx[1:] - w_tx[:-1]).pow(2).mean()
+    tau_term = (tau_tx[1:] - tau_tx[:-1]).pow(2).mean() / (max_delay ** 2)
+    return w_term + tau_term
+
+
+def total_loss(p_pred, p_target, weights, lam=0.8, lam_bg=0.0):
+    """L_total = lam * L_SMSLE + (1 - lam) * L_unity + lam_bg * L_bg
+
+    (Eq. 15 of the paper, optionally extended with the linear-domain
+    background-suppression term that aligns training with CNR/PSNR.)
 
     p_pred   : [B, P]      MLP-beamformed reconstruction
     p_target : [B, P]      ground-truth scatterer map (detached)
     weights  : [B*P, M*M]  apodization weights from MLP (for unity penalty)
     lam      : float       weight on the image loss term
+    lam_bg   : float       weight on the background-power term (default 0)
 
     returns (total, image_loss, unity_loss) for logging.
     """
     l_img   = smsle_loss(p_pred, p_target)
     l_unity = unity_gain_penalty(weights)
-    return lam * l_img + (1.0 - lam) * l_unity, l_img, l_unity
+    total = lam * l_img + (1.0 - lam) * l_unity
+    if lam_bg > 0:
+        total = total + lam_bg * background_power(p_pred, p_target)
+    return total, l_img, l_unity

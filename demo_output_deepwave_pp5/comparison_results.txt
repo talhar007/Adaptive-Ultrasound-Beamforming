@@ -1,0 +1,153 @@
+======================================================================
+  ABLE++ Reconstruction Results — Comparison
+======================================================================
+
+Test Case 1 (sparse):
+  Ground Truth: 2 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.010376      32.16     0.7850       6.15
+  FISTA    0.000472      36.31     0.0116       5.78
+  MVDR     0.010733      33.16     0.8151       2.59
+  MVDR-NS   0.000641      38.99     0.0092       4.31
+  ABLE     0.000225      38.44     0.0025       3.09  ← learned weights
+  ABLE++   0.000331      37.54     0.0090       7.34
+    ↳ ABLE loss — total: 4.8049 | image: 6.0055 | unity: 0.0027
+
+Test Case 2 (dense):
+  Ground Truth: 20 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.020440      27.17     1.2907      -0.38
+  FISTA    0.002571      30.57     0.0642       2.69
+  MVDR     0.020138      28.16     1.3036      -4.20
+  MVDR-NS   0.003359      32.70     0.1741       0.55
+  ABLE     0.001356      31.99     0.0214       0.23  ← learned weights
+  ABLE++   0.001254      33.00     0.0288       1.88
+    ↳ ABLE loss — total: 1.1239 | image: 1.4043 | unity: 0.0022
+
+Test Case 3 (clustered):
+  Ground Truth: 6 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.028982      26.10     1.7020       4.27
+  FISTA    0.001237      32.83     0.0252       4.01
+  MVDR     0.030533      25.95     1.7415      -1.04
+  MVDR-NS   0.005554      33.43     0.4255       2.61
+  ABLE     0.000959      32.95     0.0199       2.37  ← learned weights
+  ABLE++   0.000908      34.15     0.0298       3.55
+    ↳ ABLE loss — total: 0.5615 | image: 0.7012 | unity: 0.0025
+
+Test Case 4 (sparse):
+  Ground Truth: 6 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.012101      31.93     0.9503      -0.67
+  FISTA    0.000989      34.41     0.0227       4.20
+  MVDR     0.013934      31.44     1.0332      -2.86
+  MVDR-NS   0.001940      34.47     0.0768       2.92
+  ABLE     0.000560      35.48     0.0088       1.80  ← learned weights
+  ABLE++   0.000596      36.02     0.0142       4.62
+    ↳ ABLE loss — total: 0.2167 | image: 0.2700 | unity: 0.0037
+
+Test Case 5 (dense):
+  Ground Truth: 20 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.015856      28.93     1.0868       0.52
+  FISTA    0.001969      30.53     0.0438       0.40
+  MVDR     0.020860      27.94     1.3326      -5.43
+  MVDR-NS   0.005102      31.88     0.3494      -0.07
+  ABLE     0.001197      31.36     0.0169      -0.40  ← learned weights
+  ABLE++   0.001125      32.78     0.0240       2.52
+    ↳ ABLE loss — total: 2.6704 | image: 3.3373 | unity: 0.0030
+
+Test Case 6 (clustered):
+  Ground Truth: 11 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.016384      29.01     1.1433       2.73
+  FISTA    0.001501      31.43     0.0301       3.94
+  MVDR     0.014587      29.75     1.0319      -1.10
+  MVDR-NS   0.004680      32.58     0.3337       2.91
+  ABLE     0.000909      32.83     0.0129       2.22  ← learned weights
+  ABLE++   0.000796      33.25     0.0148       5.73
+    ↳ ABLE loss — total: 2.5712 | image: 3.2132 | unity: 0.0033
+
+Test Case 7 (sparse):
+  Ground Truth: 3 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.019769      29.78     1.3827       2.70
+  FISTA    0.000839      34.28     0.0198       7.91
+  MVDR     0.018208      30.15     1.2515      -0.12
+  MVDR-NS   0.003262      35.34     0.2285       4.12
+  ABLE     0.000346      36.82     0.0045       3.53  ← learned weights
+  ABLE++   0.000230      43.24     0.0082       5.16
+    ↳ ABLE loss — total: 0.3657 | image: 0.4563 | unity: 0.0031
+
+Test Case 8 (dense):
+  Ground Truth: 20 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.021526      26.93     1.3028      -1.05
+  FISTA    0.002208      30.45     0.0507       0.74
+  MVDR     0.019287      27.75     1.1861      -3.11
+  MVDR-NS   0.004116      32.20     0.2453       1.14
+  ABLE     0.001443      31.47     0.0246      -0.13  ← learned weights
+  ABLE++   0.001510      32.76     0.0457       2.01
+    ↳ ABLE loss — total: 2.5390 | image: 3.1732 | unity: 0.0021
+
+Test Case 9 (clustered):
+  Ground Truth: 9 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.073538      18.91     2.8483       1.88
+  FISTA    0.001802      31.21     0.0443       5.64
+  MVDR     0.017320      29.19     1.1659       1.43
+  MVDR-NS   0.006506      33.30     0.5071       5.09
+  ABLE     0.001127      32.58     0.0266       2.61  ← learned weights
+  ABLE++   0.000645      35.48     0.0177       5.01
+    ↳ ABLE loss — total: 1.3478 | image: 1.6841 | unity: 0.0024
+
+Test Case 10 (sparse):
+  Ground Truth: 5 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.017605      29.31     1.2137       4.73
+  FISTA    0.001001      33.48     0.0216       4.56
+  MVDR     0.016200      30.15     1.1181       0.38
+  MVDR-NS   0.003107      34.49     0.1976       3.19
+  ABLE     0.000530      34.71     0.0068       2.52  ← learned weights
+  ABLE++   0.000476      35.29     0.0086       5.57
+    ↳ ABLE loss — total: 0.6004 | image: 0.7498 | unity: 0.0027
+
+Test Case 11 (dense):
+  Ground Truth: 20 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.025085      25.96     1.4922      -1.94
+  FISTA    0.003358      28.76     0.0840       2.42
+  MVDR     0.030951      24.94     1.6983      -5.03
+  MVDR-NS   0.003841      32.01     0.2149       0.47
+  ABLE     0.001534      31.11     0.0239      -0.60  ← learned weights
+  ABLE++   0.001285      32.81     0.0280       0.89
+    ↳ ABLE loss — total: 2.3323 | image: 2.9148 | unity: 0.0022
+
+Test Case 12 (clustered):
+  Ground Truth: 9 scatterers
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.024048      27.66     1.5579      -1.58
+  FISTA    0.001288      32.72     0.0282       6.47
+  MVDR     0.015202      30.94     1.1103      -1.02
+  MVDR-NS   0.003512      33.48     0.2256       2.12
+  ABLE     0.001113      31.57     0.0151       4.86  ← learned weights
+  ABLE++   0.000673      34.96     0.0160       6.64
+    ↳ ABLE loss — total: 0.4817 | image: 0.6013 | unity: 0.0033
+
+Summary (average across test cases):
+  method        MAE   PSNR(dB)      SMSLE    CNR(dB)
+  DAS      0.023809      27.82     1.3963       1.45
+  FISTA    0.001603      32.25     0.0372       4.06
+  MVDR     0.018996      29.13     1.2323      -1.63
+  MVDR-NS   0.003802      33.74     0.2490       2.45
+  ABLE     0.000942      33.44     0.0153       1.84
+  ABLE++   0.000819      35.11     0.0204       4.24
+
+Interpretation:
+  - MAE / SMSLE: lower = better fidelity (linear / log domain, Eq. 16)
+  - PSNR / CNR : higher = better (signal fidelity / lesion contrast, Eq. 18)
+  - ABLE uses learned apodization weights (θ) trained on synthetic data
+  - MVDR is the classical adaptive beamformer ABLE approximates
+    (Luijten et al. Sec. II-C: spatial smoothing + diagonal loading)
+  - B-mode images show typical ultrasound (dB-compressed, log scale)
+======================================================================

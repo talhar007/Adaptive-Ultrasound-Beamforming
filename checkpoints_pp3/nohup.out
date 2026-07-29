@@ -1,0 +1,161 @@
+2026-07-24 19:15:07,995  INFO      ============================================================
+2026-07-24 19:15:07,995  INFO      ABLE++ training started  2026-07-24T19:15:07.995378
+2026-07-24 19:15:08,000  INFO      Args: {'n_steps': 10000, 'batch_size': 4, 'lr': 0.001, 'lam': 0.8, 'noise_level': 0.05, 'scatterer_type': 'mixed', 'M': 64, 'nx': 128, 'nz': 128, 'epoch_size': 100, 'checkpoint_dir': 'checkpoints_pp3', 'resume': None, 'dropout': 0.0, 'learn_tx': True, 'tx_max_delay_periods': 1.0, 'tx_seed': None, 'pos_enc': True, 'lam_bg': 0.1, 'domain_rand': True, 'elem_dropout': 0.0}
+2026-07-24 19:15:08,093  INFO      GPU: NVIDIA RTX A5000  VRAM: 24112 MB
+2026-07-24 19:15:09,779  INFO      ForwardModel: M=64, nx=128, nz=128
+2026-07-24 19:15:09,779  INFO      ABLEMLP: input=4096  params=16,786,432
+2026-07-24 19:15:09,782  INFO      TxParams: global per-element, random init, |tau| < 1 period(s) (=8.0 samples), params=128 (joint ABLE++ mode, transmit-side)
+2026-07-24 19:15:14,412  INFO      Generating fixed validation batch (8 samples)...
+2026-07-24 19:15:14,597  INFO      ✓ Fixed validation data ready (8 samples)
+2026-07-24 19:16:26,812  INFO      Epoch   1/100  loss=56.4128  img=10.2606  unity=241.012304  best=56.4128  val_loss=8.4004  lr=1.00e-03  ETA=1:59:09
+2026-07-24 19:17:38,801  INFO      Epoch   2/100  loss=11.7025  img=8.9652  unity=22.643844  best=11.7025  val_loss=25.2169  lr=1.00e-03  ETA=1:57:46
+2026-07-24 19:17:39,075  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:18:51,108  INFO      Epoch   3/100  loss=10.4648  img=8.2808  unity=19.194847  best=10.4648  val_loss=7.2720  lr=9.99e-04  ETA=1:56:40
+2026-07-24 19:20:03,209  INFO      Epoch   4/100  loss=7.8669  img=6.8075  unity=12.103290  best=7.8669  val_loss=7.7770  lr=9.98e-04  ETA=1:55:26
+2026-07-24 19:20:03,529  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:21:15,673  INFO      Epoch   5/100  loss=6.0777  img=6.3408  unity=5.024298  best=6.0777  val_loss=4.6216  lr=9.96e-04  ETA=1:54:20
+2026-07-24 19:22:27,548  INFO      Epoch   6/100  loss=11.0459  img=7.1616  unity=26.578564  best=6.0777  val_loss=5.8563  lr=9.94e-04  ETA=1:53:02
+2026-07-24 19:22:27,806  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:23:39,927  INFO      Epoch   7/100  loss=6.3325  img=5.8278  unity=8.350009  best=6.0777  val_loss=4.3089  lr=9.91e-04  ETA=1:51:53
+2026-07-24 19:24:52,218  INFO      Epoch   8/100  loss=4.9486  img=5.4395  unity=2.984753  best=4.9486  val_loss=4.0007  lr=9.88e-04  ETA=1:50:42
+2026-07-24 19:24:52,746  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:26:04,953  INFO      Epoch   9/100  loss=5.4063  img=4.9660  unity=7.167470  best=4.9486  val_loss=4.1371  lr=9.84e-04  ETA=1:49:35
+2026-07-24 19:27:17,240  INFO      Epoch  10/100  loss=4.7401  img=4.9527  unity=3.889333  best=4.7401  val_loss=4.1728  lr=9.80e-04  ETA=1:48:23
+2026-07-24 19:27:17,518  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:28:29,725  INFO      Epoch  11/100  loss=4.9337  img=4.8374  unity=5.318687  best=4.7401  val_loss=6.3113  lr=9.75e-04  ETA=1:47:13
+2026-07-24 19:29:42,034  INFO      Epoch  12/100  loss=4.9321  img=4.5509  unity=6.456846  best=4.7401  val_loss=4.5066  lr=9.70e-04  ETA=1:46:01
+2026-07-24 19:29:42,356  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:30:54,431  INFO      Epoch  13/100  loss=6.1209  img=5.7616  unity=7.556502  best=4.7401  val_loss=6.3711  lr=9.65e-04  ETA=1:44:49
+2026-07-24 19:32:06,623  INFO      Epoch  14/100  loss=5.1916  img=4.7216  unity=7.070892  best=4.7401  val_loss=4.2015  lr=9.58e-04  ETA=1:43:36
+2026-07-24 19:32:06,874  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:33:19,104  INFO      Epoch  15/100  loss=4.8758  img=4.9581  unity=4.545548  best=4.7401  val_loss=5.0914  lr=9.52e-04  ETA=1:42:25
+2026-07-24 19:34:31,381  INFO      Epoch  16/100  loss=3.9682  img=4.4863  unity=1.895496  best=3.9682  val_loss=3.7261  lr=9.45e-04  ETA=1:41:13
+2026-07-24 19:34:31,710  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:35:44,062  INFO      Epoch  17/100  loss=3.7000  img=4.2119  unity=1.652141  best=3.7000  val_loss=3.8262  lr=9.38e-04  ETA=1:40:02
+2026-07-24 19:36:56,459  INFO      Epoch  18/100  loss=3.7385  img=4.0116  unity=2.645734  best=3.7000  val_loss=3.1386  lr=9.30e-04  ETA=1:38:50
+2026-07-24 19:36:56,732  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:38:09,052  INFO      Epoch  19/100  loss=3.4296  img=4.0191  unity=1.071761  best=3.4296  val_loss=2.9827  lr=9.21e-04  ETA=1:37:39
+2026-07-24 19:39:21,385  INFO      Epoch  20/100  loss=3.8258  img=3.8732  unity=3.636276  best=3.4296  val_loss=3.1797  lr=9.13e-04  ETA=1:36:27
+2026-07-24 19:39:21,652  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:40:34,000  INFO      Epoch  21/100  loss=3.4138  img=3.6846  unity=2.330748  best=3.4138  val_loss=3.5167  lr=9.04e-04  ETA=1:35:15
+2026-07-24 19:41:46,358  INFO      Epoch  22/100  loss=3.5209  img=3.9516  unity=1.798235  best=3.4138  val_loss=3.0573  lr=8.94e-04  ETA=1:34:03
+2026-07-24 19:41:46,661  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:42:59,038  INFO      Epoch  23/100  loss=3.1719  img=3.6243  unity=1.362071  best=3.1719  val_loss=2.7429  lr=8.84e-04  ETA=1:32:52
+2026-07-24 19:44:11,442  INFO      Epoch  24/100  loss=3.2086  img=3.6719  unity=1.355668  best=3.1719  val_loss=3.0832  lr=8.74e-04  ETA=1:31:40
+2026-07-24 19:44:11,725  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:45:24,072  INFO      Epoch  25/100  loss=2.7255  img=3.2210  unity=0.743220  best=2.7255  val_loss=2.6824  lr=8.63e-04  ETA=1:30:28
+2026-07-24 19:46:36,445  INFO      Epoch  26/100  loss=3.2575  img=3.4532  unity=2.474770  best=2.7255  val_loss=2.9174  lr=8.52e-04  ETA=1:29:16
+2026-07-24 19:46:36,813  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:47:49,167  INFO      Epoch  27/100  loss=3.2836  img=3.4638  unity=2.562401  best=2.7255  val_loss=4.6897  lr=8.41e-04  ETA=1:28:04
+2026-07-24 19:49:01,566  INFO      Epoch  28/100  loss=3.2810  img=3.6711  unity=1.720585  best=2.7255  val_loss=2.8052  lr=8.29e-04  ETA=1:26:52
+2026-07-24 19:49:01,813  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:50:14,235  INFO      Epoch  29/100  loss=2.6939  img=3.2557  unity=0.446428  best=2.6939  val_loss=2.5614  lr=8.17e-04  ETA=1:25:40
+2026-07-24 19:51:26,678  INFO      Epoch  30/100  loss=2.6262  img=3.1009  unity=0.727602  best=2.6262  val_loss=2.6080  lr=8.05e-04  ETA=1:24:28
+2026-07-24 19:51:26,961  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:52:39,313  INFO      Epoch  31/100  loss=3.1782  img=3.4461  unity=2.106445  best=2.6262  val_loss=2.6029  lr=7.92e-04  ETA=1:23:16
+2026-07-24 19:53:51,735  INFO      Epoch  32/100  loss=2.7840  img=3.3239  unity=0.624232  best=2.6262  val_loss=2.7161  lr=7.79e-04  ETA=1:22:03
+2026-07-24 19:53:52,226  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:55:04,613  INFO      Epoch  33/100  loss=2.6316  img=3.2058  unity=0.334895  best=2.6262  val_loss=2.8054  lr=7.66e-04  ETA=1:20:52
+2026-07-24 19:56:17,065  INFO      Epoch  34/100  loss=2.6399  img=3.0553  unity=0.978362  best=2.6262  val_loss=2.4777  lr=7.53e-04  ETA=1:19:40
+2026-07-24 19:56:17,311  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:57:29,706  INFO      Epoch  35/100  loss=2.7996  img=3.1076  unity=1.567887  best=2.6262  val_loss=2.7204  lr=7.39e-04  ETA=1:18:28
+2026-07-24 19:58:42,166  INFO      Epoch  36/100  loss=2.6358  img=3.1678  unity=0.508101  best=2.6262  val_loss=2.4892  lr=7.25e-04  ETA=1:17:15
+2026-07-24 19:58:42,415  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 19:59:54,790  INFO      Epoch  37/100  loss=2.6704  img=3.1323  unity=0.822757  best=2.6262  val_loss=2.4789  lr=7.11e-04  ETA=1:16:03
+2026-07-24 20:01:07,173  INFO      Epoch  38/100  loss=2.5234  img=3.0608  unity=0.373643  best=2.5234  val_loss=2.4916  lr=6.96e-04  ETA=1:14:51
+2026-07-24 20:01:07,464  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:02:19,855  INFO      Epoch  39/100  loss=2.6504  img=3.0323  unity=1.122617  best=2.5234  val_loss=2.4574  lr=6.82e-04  ETA=1:13:38
+2026-07-24 20:03:32,295  INFO      Epoch  40/100  loss=2.5705  img=2.9838  unity=0.917508  best=2.5234  val_loss=2.4590  lr=6.67e-04  ETA=1:12:26
+2026-07-24 20:03:32,629  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:04:45,025  INFO      Epoch  41/100  loss=2.5139  img=3.0646  unity=0.310845  best=2.5139  val_loss=2.4355  lr=6.52e-04  ETA=1:11:14
+2026-07-24 20:05:57,406  INFO      Epoch  42/100  loss=2.4910  img=3.0214  unity=0.369009  best=2.4910  val_loss=2.6596  lr=6.37e-04  ETA=1:10:01
+2026-07-24 20:05:57,755  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:07:10,203  INFO      Epoch  43/100  loss=2.5263  img=2.9823  unity=0.702557  best=2.4910  val_loss=2.4004  lr=6.22e-04  ETA=1:08:49
+2026-07-24 20:08:22,638  INFO      Epoch  44/100  loss=2.4266  img=2.9123  unity=0.483790  best=2.4266  val_loss=2.3951  lr=6.06e-04  ETA=1:07:37
+2026-07-24 20:08:22,941  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:09:35,356  INFO      Epoch  45/100  loss=2.4667  img=3.0241  unity=0.237292  best=2.4266  val_loss=2.2765  lr=5.91e-04  ETA=1:06:25
+2026-07-24 20:10:47,782  INFO      Epoch  46/100  loss=2.4980  img=2.9528  unity=0.678740  best=2.4266  val_loss=2.5187  lr=5.75e-04  ETA=1:05:12
+2026-07-24 20:10:48,133  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:12:00,474  INFO      Epoch  47/100  loss=2.5017  img=3.0165  unity=0.442480  best=2.4266  val_loss=2.2797  lr=5.60e-04  ETA=1:04:00
+2026-07-24 20:13:12,888  INFO      Epoch  48/100  loss=2.3298  img=2.7789  unity=0.533047  best=2.3298  val_loss=2.8022  lr=5.44e-04  ETA=1:02:48
+2026-07-24 20:13:13,217  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:14:25,647  INFO      Epoch  49/100  loss=2.5240  img=3.0224  unity=0.530519  best=2.3298  val_loss=2.2984  lr=5.29e-04  ETA=1:01:35
+2026-07-24 20:15:38,075  INFO      Epoch  50/100  loss=2.3016  img=2.8466  unity=0.121672  best=2.3016  val_loss=2.2119  lr=5.13e-04  ETA=1:00:23
+2026-07-24 20:15:38,382  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:16:50,813  INFO      Epoch  51/100  loss=2.2490  img=2.7642  unity=0.188446  best=2.2490  val_loss=2.2540  lr=4.97e-04  ETA=0:59:11
+2026-07-24 20:18:03,371  INFO      Epoch  52/100  loss=2.5666  img=2.9547  unity=1.014179  best=2.2490  val_loss=2.4835  lr=4.81e-04  ETA=0:57:58
+2026-07-24 20:18:03,836  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:19:16,236  INFO      Epoch  53/100  loss=2.2896  img=2.7954  unity=0.266265  best=2.2490  val_loss=2.3279  lr=4.66e-04  ETA=0:56:46
+2026-07-24 20:20:28,651  INFO      Epoch  54/100  loss=2.2703  img=2.7931  unity=0.179008  best=2.2490  val_loss=2.2157  lr=4.50e-04  ETA=0:55:34
+2026-07-24 20:20:28,983  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:21:41,366  INFO      Epoch  55/100  loss=2.2079  img=2.6576  unity=0.408961  best=2.2079  val_loss=2.3103  lr=4.35e-04  ETA=0:54:21
+2026-07-24 20:22:53,849  INFO      Epoch  56/100  loss=2.3466  img=2.8985  unity=0.139055  best=2.2079  val_loss=2.1899  lr=4.19e-04  ETA=0:53:09
+2026-07-24 20:22:54,260  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:24:06,662  INFO      Epoch  57/100  loss=2.2189  img=2.7346  unity=0.156062  best=2.2079  val_loss=2.1346  lr=4.04e-04  ETA=0:51:57
+2026-07-24 20:25:19,140  INFO      Epoch  58/100  loss=2.1160  img=2.5936  unity=0.205821  best=2.1160  val_loss=2.2030  lr=3.88e-04  ETA=0:50:44
+2026-07-24 20:25:19,484  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:26:31,894  INFO      Epoch  59/100  loss=2.1231  img=2.5832  unity=0.282721  best=2.1160  val_loss=2.1181  lr=3.73e-04  ETA=0:49:32
+2026-07-24 20:27:44,313  INFO      Epoch  60/100  loss=2.0982  img=2.5843  unity=0.153816  best=2.0982  val_loss=2.1990  lr=3.58e-04  ETA=0:48:19
+2026-07-24 20:27:44,617  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:28:57,047  INFO      Epoch  61/100  loss=2.1695  img=2.5824  unity=0.517548  best=2.0982  val_loss=2.3277  lr=3.43e-04  ETA=0:47:07
+2026-07-24 20:30:09,504  INFO      Epoch  62/100  loss=2.0588  img=2.5349  unity=0.154631  best=2.0588  val_loss=2.1277  lr=3.28e-04  ETA=0:45:54
+2026-07-24 20:30:09,817  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:31:22,203  INFO      Epoch  63/100  loss=2.0577  img=2.4694  unity=0.411039  best=2.0577  val_loss=2.2287  lr=3.14e-04  ETA=0:44:42
+2026-07-24 20:32:34,681  INFO      Epoch  64/100  loss=2.1013  img=2.5953  unity=0.124995  best=2.0577  val_loss=2.1079  lr=2.99e-04  ETA=0:43:30
+2026-07-24 20:32:35,020  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:33:47,407  INFO      Epoch  65/100  loss=2.0470  img=2.5379  unity=0.083648  best=2.0470  val_loss=2.1063  lr=2.85e-04  ETA=0:42:17
+2026-07-24 20:34:59,847  INFO      Epoch  66/100  loss=2.0488  img=2.5330  unity=0.112154  best=2.0470  val_loss=2.0669  lr=2.71e-04  ETA=0:41:05
+2026-07-24 20:35:00,233  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:36:12,633  INFO      Epoch  67/100  loss=2.0262  img=2.5157  unity=0.068237  best=2.0262  val_loss=2.0161  lr=2.58e-04  ETA=0:39:52
+2026-07-24 20:37:25,060  INFO      Epoch  68/100  loss=2.0670  img=2.5606  unity=0.092468  best=2.0262  val_loss=2.0391  lr=2.44e-04  ETA=0:38:40
+2026-07-24 20:37:25,502  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:38:37,947  INFO      Epoch  69/100  loss=1.8947  img=2.3472  unity=0.084616  best=1.8947  val_loss=2.0737  lr=2.31e-04  ETA=0:37:27
+2026-07-24 20:39:50,361  INFO      Epoch  70/100  loss=2.0268  img=2.5260  unity=0.029722  best=1.8947  val_loss=2.0011  lr=2.18e-04  ETA=0:36:15
+2026-07-24 20:39:50,681  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:41:03,045  INFO      Epoch  71/100  loss=1.9585  img=2.4414  unity=0.026898  best=1.8947  val_loss=2.5697  lr=2.05e-04  ETA=0:35:02
+2026-07-24 20:42:15,482  INFO      Epoch  72/100  loss=1.8827  img=2.3441  unity=0.036885  best=1.8827  val_loss=1.9864  lr=1.93e-04  ETA=0:33:50
+2026-07-24 20:42:15,767  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:43:28,175  INFO      Epoch  73/100  loss=2.0109  img=2.5032  unity=0.041792  best=1.8827  val_loss=1.9482  lr=1.81e-04  ETA=0:32:37
+2026-07-24 20:44:40,645  INFO      Epoch  74/100  loss=2.0026  img=2.4955  unity=0.030865  best=1.8827  val_loss=1.9323  lr=1.69e-04  ETA=0:31:25
+2026-07-24 20:44:40,954  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:45:53,348  INFO      Epoch  75/100  loss=1.8093  img=2.2496  unity=0.048036  best=1.8093  val_loss=1.9847  lr=1.58e-04  ETA=0:30:12
+2026-07-24 20:47:05,730  INFO      Epoch  76/100  loss=1.8347  img=2.2865  unity=0.027371  best=1.8093  val_loss=1.9711  lr=1.47e-04  ETA=0:29:00
+2026-07-24 20:47:06,032  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:48:18,423  INFO      Epoch  77/100  loss=1.9731  img=2.4580  unity=0.033688  best=1.8093  val_loss=1.8626  lr=1.36e-04  ETA=0:27:47
+2026-07-24 20:49:30,859  INFO      Epoch  78/100  loss=1.7744  img=2.2111  unity=0.027259  best=1.7744  val_loss=1.9046  lr=1.26e-04  ETA=0:26:35
+2026-07-24 20:49:31,183  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:50:43,624  INFO      Epoch  79/100  loss=1.8895  img=2.3577  unity=0.016993  best=1.7744  val_loss=1.8693  lr=1.16e-04  ETA=0:25:22
+2026-07-24 20:51:56,045  INFO      Epoch  80/100  loss=1.8378  img=2.2908  unity=0.025723  best=1.7744  val_loss=1.8694  lr=1.06e-04  ETA=0:24:10
+2026-07-24 20:51:56,369  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:53:08,791  INFO      Epoch  81/100  loss=1.7885  img=2.2219  unity=0.055116  best=1.7744  val_loss=1.9477  lr=9.73e-05  ETA=0:22:57
+2026-07-24 20:54:21,208  INFO      Epoch  82/100  loss=1.6812  img=2.0849  unity=0.066616  best=1.6812  val_loss=1.8905  lr=8.86e-05  ETA=0:21:45
+2026-07-24 20:54:21,554  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:55:33,902  INFO      Epoch  83/100  loss=1.8167  img=2.2666  unity=0.017086  best=1.6812  val_loss=1.8472  lr=8.03e-05  ETA=0:20:32
+2026-07-24 20:56:46,262  INFO      Epoch  84/100  loss=1.8190  img=2.2726  unity=0.004965  best=1.6812  val_loss=1.8237  lr=7.24e-05  ETA=0:19:20
+2026-07-24 20:56:46,562  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 20:57:58,960  INFO      Epoch  85/100  loss=1.7978  img=2.2433  unity=0.015600  best=1.6812  val_loss=1.8000  lr=6.50e-05  ETA=0:18:07
+2026-07-24 20:59:11,390  INFO      Epoch  86/100  loss=1.7420  img=2.1761  unity=0.005609  best=1.6812  val_loss=1.7806  lr=5.81e-05  ETA=0:16:55
+2026-07-24 20:59:11,727  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 21:00:24,439  INFO      Epoch  87/100  loss=1.8427  img=2.3017  unity=0.006639  best=1.6812  val_loss=1.7559  lr=5.15e-05  ETA=0:15:42
+2026-07-24 21:01:36,876  INFO      Epoch  88/100  loss=1.8118  img=2.2633  unity=0.005495  best=1.6812  val_loss=1.7635  lr=4.55e-05  ETA=0:14:30
+2026-07-24 21:01:37,168  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 21:02:49,632  INFO      Epoch  89/100  loss=1.6376  img=2.0452  unity=0.006963  best=1.6376  val_loss=1.7900  lr=3.99e-05  ETA=0:13:17
+2026-07-24 21:04:02,067  INFO      Epoch  90/100  loss=1.7620  img=2.2004  unity=0.008245  best=1.6376  val_loss=1.7681  lr=3.47e-05  ETA=0:12:05
+2026-07-24 21:04:02,510  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 21:05:14,930  INFO      Epoch  91/100  loss=1.6759  img=2.0935  unity=0.005322  best=1.6376  val_loss=1.8214  lr=3.01e-05  ETA=0:10:52
+2026-07-24 21:06:27,337  INFO      Epoch  92/100  loss=1.6016  img=2.0006  unity=0.005558  best=1.6016  val_loss=1.8163  lr=2.59e-05  ETA=0:09:40
+2026-07-24 21:06:27,699  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 21:07:40,075  INFO      Epoch  93/100  loss=1.7667  img=2.2066  unity=0.006762  best=1.6016  val_loss=1.7727  lr=2.22e-05  ETA=0:08:27
+2026-07-24 21:08:52,460  INFO      Epoch  94/100  loss=1.6796  img=2.0975  unity=0.008309  best=1.6016  val_loss=1.7825  lr=1.89e-05  ETA=0:07:15
+2026-07-24 21:08:52,809  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 21:10:05,209  INFO      Epoch  95/100  loss=1.6875  img=2.1077  unity=0.006766  best=1.6016  val_loss=1.7842  lr=1.62e-05  ETA=0:06:02
+2026-07-24 21:11:17,788  INFO      Epoch  96/100  loss=1.8042  img=2.2525  unity=0.010813  best=1.6016  val_loss=1.7484  lr=1.40e-05  ETA=0:04:50
+2026-07-24 21:11:18,398  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 21:12:30,976  INFO      Epoch  97/100  loss=1.6929  img=2.1136  unity=0.010081  best=1.6016  val_loss=1.7554  lr=1.22e-05  ETA=0:03:37
+2026-07-24 21:13:43,414  INFO      Epoch  98/100  loss=1.7026  img=2.1260  unity=0.008869  best=1.6016  val_loss=1.7544  lr=1.10e-05  ETA=0:02:25
+2026-07-24 21:13:43,703  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 21:14:56,096  INFO      Epoch  99/100  loss=1.7527  img=2.1885  unity=0.009633  best=1.6016  val_loss=1.7443  lr=1.02e-05  ETA=0:01:12
+2026-07-24 21:16:08,461  INFO      Epoch 100/100  loss=1.7887  img=2.2334  unity=0.010027  best=1.6016  val_loss=1.7333  lr=1.00e-05  ETA=0:00:00
+2026-07-24 21:16:08,717  INFO      Checkpoint saved -> checkpoints_pp3/checkpoint_latest.pt
+2026-07-24 21:16:08,717  INFO      Training complete.  Best loss: 1.6016
+2026-07-24 21:16:08,720  INFO      Final checkpoint: checkpoints_pp3/checkpoint_latest.pt

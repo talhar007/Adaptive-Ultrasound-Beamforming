@@ -85,21 +85,39 @@ def random_point_scatterers(batch_size, nx, nz, n_points=(2, 6),
     return images
 
 
-def random_scatterer_batch(batch_size, nx, nz, scatterer_type='mixed', device='cpu'):
+def random_scatterer_batch(batch_size, nx, nz, scatterer_type='mixed', device='cpu',
+                           max_points=None):
     """Generate a batch of diverse scatterer maps.
 
     scatterer_type: 'sparse' | 'dense' | 'clustered' | 'mixed'
         'mixed' draws a fresh random type for every sample independently,
         which forces the MLP to generalise across imaging scenarios.
 
+    max_points: if set (e.g. 20 for demo/evaluation), every map is capped at
+        ~max_points scatterers so results stay visually interpretable:
+        'dense' becomes exactly max_points isolated points (keeping its wide
+        amplitude range) and 'clustered' draws fewer, smaller clusters.
+        Training keeps max_points=None so the speckle-like dense fields
+        (thousands of points) are unchanged.
+
     Returns [B, nx*nz] float tensor of ground-truth reflectivity.
     """
     images = torch.zeros(batch_size, nx * nz, device=device)
     types  = list(_GENERATORS.keys())
     for b in range(batch_size):
-        t   = _random.choice(types) if scatterer_type == 'mixed' else scatterer_type
-        gen = _GENERATORS[t]
-        images[b] = gen(nx, nz, device=device)
+        t = _random.choice(types) if scatterer_type == 'mixed' else scatterer_type
+        if max_points is None:
+            images[b] = _GENERATORS[t](nx, nz, device=device)
+        elif t == 'dense':
+            images[b] = _sparse(nx, nz, n_points=(max_points, max_points),
+                                amplitude=(0.1, 1.0), device=device)
+        elif t == 'clustered':
+            npc = max(3, max_points // 3)   # 2-3 clusters x <=npc points <= max_points
+            images[b] = _clustered(nx, nz, n_clusters=(2, 3),
+                                   n_per_cluster=(3, npc), device=device)
+        else:
+            images[b] = _sparse(nx, nz, n_points=(2, min(6, max_points)),
+                                device=device)
     return images
 
 

@@ -29,18 +29,19 @@ def _estimate_lipschitz(model, device, dtype, n_power_iter=30):
 
 
 @torch.no_grad()
-def fista_reconstruct(model, rf_data, n_iter=50):
+def fista_reconstruct(model, rf_data, n_iter=10):
     """FISTA using model.simulate_adjoint as the gradient operator.
 
     simulate_adjoint applies matched filtering (corr with base_pulse) before
     the delay-and-sum, making it the true mathematical adjoint of simulate.
 
-    Lambda is adaptive: set to 0.5 * peak(A^T b) — the largest meaningful
-    threshold, computed from the actual RF measurement — and held fixed across
-    all iterations. Annealing lambda toward zero was removed because on
-    low-noise synthetic sparse data it enabled near-perfect sparse recovery
-    (MAE ≈ 1e-6), which is an unfair over-optimised baseline. A fixed
-    adaptive lambda makes FISTA a realistic compressed-sensing baseline.
+    Lambda is adaptive: set to 0.05 * peak(A^T b), computed from the actual
+    RF measurement, and held fixed across all iterations (no annealing, so
+    FISTA retains meaningful L1 regularisation throughout and stays a
+    realistic compressed-sensing baseline).
+
+    n_iter defaults to 10 (was 50): comparable memory/compute budget to the
+    other methods, at the cost of less complete convergence.
 
     rf_data: [B, M, T]
     returns: flat reconstructed image [B, nx*nz]
@@ -55,17 +56,12 @@ def fista_reconstruct(model, rf_data, n_iter=50):
     z = x.clone()
     t = 1.0
 
-    # Data-driven lambda: 0.5 × peak of matched-filtered back-projection.
-    # This is the largest threshold that preserves at least the brightest
-    # scatterer in the first soft-threshold step, and is the standard
-    # initialisation for single-iteration ISTA. Held fixed (no annealing)
-    # so FISTA retains meaningful L1 regularisation throughout.
+    # Data-driven lambda: 0.05 × peak of the matched-filtered back-projection.
+    # Low enough to recover scatterers down to ~5% of the brightest response
+    # (earlier 0.5/0.3 × peak thresholds cut weak-but-real scatterers out of
+    # clustered fields), while still suppressing background clutter.
     atb = model.simulate_adjoint(rf_data)
-    # 0.3 × peak: recovers scatterers down to 30% of the brightest response,
-    # which covers the full amplitude range of the clustered/dense generators
-    # (amplitude min = 0.5 × max after 1/r gain). 0.5 was over-aggressive for
-    # multi-scatterer cases, leaving only 2-3 visible dots in clustered fields.
-    lam = 0.3 * atb.abs().amax(dim=-1).mean().item()
+    lam = 0.05 * atb.abs().amax(dim=-1).mean().item()
 
     for _ in range(n_iter):
         residual = model.simulate(z) - rf_data

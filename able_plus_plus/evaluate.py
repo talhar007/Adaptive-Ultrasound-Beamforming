@@ -12,6 +12,57 @@ def mae(pred, target):
     return (pred - target).abs().mean().item()
 
 
+def psnr(pred, target, max_val=1.0):
+    """Peak Signal-to-Noise Ratio (dB) between two maps on a shared
+    [0, max_val] scale. Higher = better."""
+    pred, target = np.asarray(pred), np.asarray(target)
+    mse = float(((pred - target) ** 2).mean())
+    return float(10.0 * np.log10(max_val ** 2 / (mse + 1e-12)))
+
+
+def smsle(pred_norm, target_norm, floor=1e-3):
+    """Signed-MSLE metric (Luijten et al. Eq. 16) on peak-normalized
+    magnitude maps. Lower = better.
+
+    Both inputs are non-negative on the shared [0, 1] scale, so the negative
+    branch of Eq. 16 vanishes and the metric reduces to the MSLE of the
+    positive part. Values are floored at `floor` (1e-3 = -60 dB, the B-mode
+    display dynamic range) so empty background pixels — identical in pred
+    and target — contribute zero rather than unbounded log(eps) noise.
+    """
+    p = np.clip(np.asarray(pred_norm), floor, None)
+    t = np.clip(np.asarray(target_norm), floor, None)
+    return float(((np.log10(p) - np.log10(t)) ** 2).mean())
+
+
+def scatterer_region_masks(gt_norm, thresh=0.05, r_high=2, r_low=6):
+    """High/low-intensity region masks for CNR, derived from ground truth.
+
+    high = within r_high pixels of any true scatterer; low = background
+    further than r_low pixels from every scatterer. Luijten et al. draw
+    these regions by hand on cyst phantoms (Fig. 3); with synthetic data the
+    exact ground truth lets us construct them automatically.
+    """
+    core = torch.from_numpy((np.asarray(gt_norm) > thresh).astype(np.float32))[None, None]
+
+    def dilate(mask, r):
+        return torch.nn.functional.max_pool2d(mask, kernel_size=2 * r + 1,
+                                              stride=1, padding=r)
+
+    high = dilate(core, r_high)[0, 0].numpy() > 0.5
+    low  = dilate(core, r_low)[0, 0].numpy() < 0.5
+    return low, high
+
+
+def scatterer_cnr(image_db, gt_norm, **mask_kwargs):
+    """CNR (Eq. 18) on a dB image, with region masks auto-derived from the
+    ground-truth scatterer map. Higher = better contrast."""
+    mask_low, mask_high = scatterer_region_masks(gt_norm, **mask_kwargs)
+    if mask_low.sum() == 0 or mask_high.sum() == 0:
+        return float('nan')
+    return cnr(np.asarray(image_db), mask_low, mask_high)
+
+
 def fwhm_1d(profile, dx):
     """Full-Width-at-Half-Maximum of a 1-D beam profile (linear amplitude).
 

@@ -47,10 +47,16 @@ class ABLEMLP(nn.Module):
     time the per-pixel weight sums collapsed from ~1 to ~0, distorting
     reconstructed amplitudes.
     """
-    def __init__(self, N, dropout=0.0):
+    def __init__(self, N, dropout=0.0, pos_dim=0):
+        """pos_dim > 0 appends that many positional-encoding features to
+        the input (see pixel_positions): the network then knows WHERE the
+        pixel is, lifting the paper's pixel-agnostic limitation (their
+        Sec. VI names spatial awareness as future work). pos_dim=0 keeps
+        the paper-faithful architecture."""
         super().__init__()
         h = max(N // 4, 1)
-        self.fc1 = nn.Linear(N,     h)       # encoder:  N   -> N/4
+        self.pos_dim = pos_dim
+        self.fc1 = nn.Linear(N + pos_dim, h) # encoder:  N(+pos) -> N/4
         self.fc2 = nn.Linear(2 * h, h)       #           2N/4 -> N/4
         self.fc3 = nn.Linear(2 * h, h)       #           2N/4 -> N/4
         self.fc4 = nn.Linear(2 * h, N)       # decoder:  2N/4 -> N
@@ -85,10 +91,25 @@ def beamform_weighted(pre_summed_pixels, weights):
     return (weights * pre_summed_pixels).sum(dim=-1)
 
 
-def apply_mlp(mlp, pre_summed):
+def pixel_positions(nx, nz, device='cpu'):
+    """Positional-encoding features for every pixel: [P, 2] with
+    lateral x in [-1, 1] and depth z in [0, 1].
+
+    Follows the physics-grid pixel ordering (geometry.build_grids flattens
+    [nz, nx], so p = z_row * nx + x_col).
+    """
+    p = torch.arange(nx * nz, device=device)
+    z = (p // nx).float() / max(nz - 1, 1)          # depth 0..1
+    x = 2.0 * (p % nx).float() / max(nx - 1, 1) - 1.0   # lateral -1..1
+    return torch.stack([x, z], dim=-1)               # [P, 2]
+
+
+def apply_mlp(mlp, pre_summed, pos=None):
     """Full pixel-wise apodization pass, handling the reshape in one place.
 
     pre_summed: [B, M*M, P]
+    pos:        [P, pos_dim] positional features (pixel_positions), or None.
+                Must match the network's pos_dim.
     returns:
         p_recon  [B, P]       reconstructed image
         weights  [B*P, M*M]   predicted weights (needed for unity-gain loss)
@@ -102,6 +123,9 @@ def apply_mlp(mlp, pre_summed):
     # The weighted sum below still uses the raw x, so the reconstruction
     # keeps its physical scale.
     x_in    = x / (x.abs().amax(dim=-1, keepdim=True) + 1e-12)
+    if pos is not None:
+        # row order is b*P + p, so the per-pixel features tile per batch
+        x_in = torch.cat([x_in, pos.repeat(B, 1)], dim=-1)
     weights = mlp(x_in)                                         # [B*P, M*M]
     p_recon = beamform_weighted(x, weights).reshape(B, P)       # [B, P]
     return p_recon, weights, x
