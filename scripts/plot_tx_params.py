@@ -8,7 +8,7 @@ vectors (applied on the transmit side by simulate_tx):
                 carrier periods (fs/fc samples each)
 
 Usage:
-    python scripts/plot_tx_params.py [--checkpoint checkpoints_pp/checkpoint_latest.pt]
+    python scripts/plot_tx_params.py [--checkpoint Trained_Checkpoints/checkpoints_pp5/checkpoint_latest.pt]
 """
 import argparse
 import sys
@@ -26,7 +26,7 @@ from able_plus_plus.networks.tx_params import TxParams
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--checkpoint', type=str,
-                   default='checkpoints_pp/checkpoint_latest.pt')
+                   default='Trained_Checkpoints/checkpoints_pp/checkpoint_latest.pt')
     p.add_argument('--M', type=int, default=64)
     p.add_argument('--fc', type=float, default=5e6)
     p.add_argument('--fs', type=float, default=40e6)

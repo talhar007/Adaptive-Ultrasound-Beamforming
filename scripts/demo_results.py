@@ -453,7 +453,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Demo ABLE++ pipeline: generate test case, compare methods, show metrics'
     )
-    parser.add_argument('--checkpoint', type=str, default='checkpoints/checkpoint_latest.pt',
+    parser.add_argument('--checkpoint', type=str, default='Trained_Checkpoints/checkpoints/checkpoint_latest.pt',
                         help='path to trained model checkpoint')
     parser.add_argument('--n_test', type=int, default=6,
                         help='number of test cases to run')
@@ -461,16 +461,16 @@ def main():
     parser.add_argument('--M', type=int, default=64)
     parser.add_argument('--nx', type=int, default=128)
     parser.add_argument('--nz', type=int, default=128)
-    parser.add_argument('--output_dir', type=str, default='demo_output',
+    parser.add_argument('--output_dir', type=str, default='Results/demo_output',
                         help='directory to save results')
     parser.add_argument('--max_points', type=int, default=20,
                         help='cap on scatterers per test case (keeps images '
                              'visually countable; dense cases become '
                              'max_points isolated points)')
-    parser.add_argument('--pp_checkpoint', type=str, default="/home/taah3149/Documents/Research Project/checkpoints_pp5/checkpoint_latest.pt",
+    parser.add_argument('--pp_checkpoint', type=str, default="Trained_Checkpoints/checkpoints_pp5/checkpoint_latest.pt",
                         help='ABLE++ checkpoint (trained with --learn_tx) — '
                              'adds a joint TX+RX column on the same cases')
-    parser.add_argument('--pps_checkpoint', type=str, default="/home/taah3149/Documents/Research Project/checkpoints_pp6_smooth/checkpoint_latest.pt",
+    parser.add_argument('--pps_checkpoint', type=str, default="Trained_Checkpoints/checkpoints_pp7_smooth2/checkpoint_latest.pt",
                         help='ABLE++S checkpoint (--learn_tx --tx_smooth > 0) '
                              '— adds a SEPARATE smoothness-regularized joint '
                              'TX+RX column alongside (not instead of) ABLE++')

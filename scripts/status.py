@@ -6,8 +6,9 @@ running (or most-recently-finished) training job:
     python status.py                       # one-shot snapshot
     watch -n 30 python status.py           # refresh every 30 seconds live
 
-Reads  checkpoints/status.json  (written by run_training.py every
---log_interval steps) and  checkpoints/training.log  (last few lines).
+Reads  Trained_Checkpoints/checkpoints/status.json  (written by run_training.py
+every --log_interval steps) and  Trained_Checkpoints/checkpoints/training.log
+(last few lines).
 """
 import json
 import sys
@@ -15,8 +16,8 @@ from datetime import datetime
 from pathlib import Path
 
 
-STATUS_FILE = Path('checkpoints/status.json')
-LOG_FILE    = Path('checkpoints/training.log')
+STATUS_FILE = Path('Trained_Checkpoints/checkpoints/status.json')
+LOG_FILE    = Path('Trained_Checkpoints/checkpoints/training.log')
 STALE_WARN  = 120   # seconds before we warn the job may have died
 
 

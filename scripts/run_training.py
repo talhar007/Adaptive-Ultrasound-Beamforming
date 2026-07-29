@@ -417,7 +417,7 @@ def parse_args():
     p.add_argument('--nz',              type=int,   default=128)
     p.add_argument('--epoch_size',      type=int,   default=100,
                    help='training steps per epoch')
-    p.add_argument('--checkpoint_dir',  type=str,   default='checkpoints')
+    p.add_argument('--checkpoint_dir',  type=str,   default='Trained_Checkpoints/checkpoints')
     p.add_argument('--resume',          type=str,   default=None)
     p.add_argument('--dropout',         type=float, default=0.0,
                    help='keep 0: data is generated fresh each step (no '

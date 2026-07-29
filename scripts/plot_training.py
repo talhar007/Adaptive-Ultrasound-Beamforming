@@ -5,8 +5,8 @@ epoch by run_training.py) and writes loss curves next to it. Re-run any
 time to refresh the figure while training is going.
 
 Usage:
-    python scripts/plot_training.py                            # checkpoints/
-    python scripts/plot_training.py --checkpoint_dir checkpoints_cnn
+    python scripts/plot_training.py                            # Trained_Checkpoints/checkpoints/
+    python scripts/plot_training.py --checkpoint_dir Trained_Checkpoints/checkpoints_pp5
 """
 import argparse
 import sys
@@ -21,7 +21,7 @@ import torch
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--checkpoint_dir', type=str, default='checkpoints')
+    p.add_argument('--checkpoint_dir', type=str, default='Trained_Checkpoints/checkpoints')
     p.add_argument('--checkpoint', type=str, default=None,
                    help='explicit checkpoint path (overrides --checkpoint_dir)')
     args = p.parse_args()

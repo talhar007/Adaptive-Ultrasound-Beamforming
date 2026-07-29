@@ -28,8 +28,8 @@ def bar(current, total, width=50):
 
 def monitor_training():
     """Monitor status.json and print progress."""
-    status_file = Path("checkpoints/status.json")
-    training_log = Path("checkpoints/training.log")
+    status_file = Path("Trained_Checkpoints/checkpoints/status.json")
+    training_log = Path("Trained_Checkpoints/checkpoints/training.log")
 
     print("\n" + "=" * 70)
     print("  ABLE++ Training Monitor")
@@ -96,7 +96,7 @@ def run_demo():
         "--nx", "128",
         "--nz", "128",
         "--n_test", "3",
-        "--output_dir", "demo_output",
+        "--output_dir", "Results/demo_output",
     ]
 
     print(f"Command: {' '.join(cmd)}\n")
@@ -108,9 +108,9 @@ def run_demo():
         print("  Demo Complete!")
         print("=" * 70)
         print(f"\nResults saved to:")
-        print(f"  - demo_output/comparison_results.txt      (metrics)")
-        print(f"  - demo_output/case_XX_reconstruction.png  (B-mode images)")
-        print(f"  - demo_output/case_XX_tensors.pt          (raw data)\n")
+        print(f"  - Results/demo_output/comparison_results.txt      (metrics)")
+        print(f"  - Results/demo_output/case_XX_reconstruction.png  (B-mode images)")
+        print(f"  - Results/demo_output/case_XX_tensors.pt          (raw data)\n")
         print("Ready to present to your professor!\n")
     else:
         print(f"\nERROR: Demo failed with exit code {result.returncode}")
