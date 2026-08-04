@@ -1,0 +1,57 @@
+#!/bin/bash
+# ============================================================
+# LSF job script: ABLE++ (joint TX+RX), full scale, WITH the das_adjoint
+# TX/RX delay-alignment fix. Replicates the exact hyperparameters of the
+# historical "pp5" winning run (Trained_Checkpoints/checkpoints_pp5/,
+# trained 2026-07-25, pre-fix) so the delay-alignment fix is the ONLY
+# variable that changed versus that baseline -- a fair before/after
+# comparison, not a new hyperparameter search.
+#
+# pp5 recipe (from checkpoints_pp5/training.log): n_steps=20000,
+# tx_max_delay_periods=0.5, pos_enc=True, lam_bg=0.1, domain_rand=True,
+# M=64/nx=128/nz=128, lr=1e-3, lam=0.8, noise_level=0.05, batch_size=4.
+#
+# Submit with:  bsub < config/submit_job_able_pp_fullscale.lsf
+# Monitor with: python scripts/status.py --checkpoint_dir Trained_Checkpoints/checkpoints_fullscale_able_pp_fixed
+# ============================================================
+
+#BSUB -J able_pp_fullscale_fixed
+#BSUB -o Trained_Checkpoints/checkpoints_fullscale_able_pp_fixed/lsf_%J.out
+#BSUB -e Trained_Checkpoints/checkpoints_fullscale_able_pp_fixed/lsf_%J.err
+
+#BSUB -q BatchGPU
+#BSUB -n 4
+#BSUB -R "rusage[mem=16000]"
+#BSUB -gpu "num=1:mode=exclusive_process:mps=no"
+#BSUB -W 72:00
+
+#BSUB -B
+#BSUB -N
+
+set -euo pipefail
+
+echo "Job  : $LSB_JOBID  on $(hostname) at $(date)"
+module purge
+module load cuda/v12.2
+source "$HOME/able_env/bin/activate"
+nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader || true
+
+PROJECT_DIR="$HOME/Documents/Research Project"
+cd "$PROJECT_DIR"
+mkdir -p Trained_Checkpoints/checkpoints_fullscale_able_pp_fixed
+
+python scripts/run_training.py \
+    --n_steps                20000      \
+    --batch_size              4          \
+    --lr                      1e-3       \
+    --lam                     0.8        \
+    --noise_level              0.05       \
+    --scatterer_type           mixed      \
+    --learn_tx                            \
+    --tx_max_delay_periods    0.5        \
+    --pos_enc                             \
+    --lam_bg                  0.1        \
+    --domain_rand                         \
+    --checkpoint_dir Trained_Checkpoints/checkpoints_fullscale_able_pp_fixed
+
+echo "Job finished at $(date)"

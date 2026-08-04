@@ -1,0 +1,86 @@
+#!/bin/bash
+# ============================================================
+# LSF job script: ABLE (receive-only) trained against an MVDR-NS target
+# instead of ground truth -- the professor's primary ask for the ABLE side
+# ("ABLE should be trained with MVDR output... our implementation [ABLE++]
+# should be trained with ground truth"). This is a NEW model, not a
+# retrain of anything that already exists -- the current
+# Trained_Checkpoints/checkpoints/ was trained on ground truth and already
+# covers the "keep GT training as another benchmark candidate" half of
+# that ask.
+#
+# Submit with:  bsub < config/submit_job_able_mvdr_target.lsf
+# Monitor with: python scripts/status.py
+# Kill with:    bkill <jobid>
+#
+# SEQUENCING: run this AFTER config/submit_job.lsf (the ABLE++
+# das_adjoint physics-fix validation) has been submitted and reviewed --
+# per user decision, the physics fix is the higher-priority track.
+#
+# This is a DEBUG-SCALE run (halved M and grid resolution, x_lim/z_end
+# also halved to keep pixel spacing dx/dz unchanged) for a fast first
+# read. Once validated, resubmit with --M 64 --nx 128 --nz 128
+# --x_lim 32e-3 --z_end 74e-3 (the defaults, so those four flags can
+# simply be dropped) for the full-scale run, with a fresh
+# --checkpoint_dir so it doesn't collide with this debug run.
+# ============================================================
+
+# ---- Job identity ----
+#BSUB -J able_mvdr_target_debug
+#BSUB -o Trained_Checkpoints/checkpoints_debug_able_mvdr_target/lsf_%J.out
+#BSUB -e Trained_Checkpoints/checkpoints_debug_able_mvdr_target/lsf_%J.err
+
+# ---- Queue and resources ----
+#BSUB -q BatchGPU
+#BSUB -n 4
+#BSUB -R "rusage[mem=16000]"
+#BSUB -gpu "num=1:mode=exclusive_process:mps=no"
+#BSUB -W 72:00
+
+# ---- Notifications ----
+#BSUB -B
+#BSUB -N
+
+# ============================================================
+set -euo pipefail
+
+echo "Job  : $LSB_JOBID  on $(hostname) at $(date)"
+echo "Queue: $LSB_QUEUE"
+echo "Cores: $LSB_DJOB_NUMPROC"
+
+module purge
+module load cuda/v12.2
+
+source "$HOME/able_env/bin/activate"
+
+nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader || true
+
+PROJECT_DIR="$HOME/Documents/Research Project"
+cd "$PROJECT_DIR"
+mkdir -p Trained_Checkpoints/checkpoints_debug_able_mvdr_target
+
+# ============================================================
+# Launch training — receive-only MLP (no --learn_tx: this is plain ABLE,
+# not ABLE++), target_mode=mvdr so the loss compares against an MVDR-NS
+# reconstruction of the same RF instead of the ground-truth scatterer map.
+# lam_bg stays at its default 0 -- background_power() requires a
+# ground-truth mask and is hard-blocked by run_training.py whenever
+# target_mode=mvdr. Debug-scale physics for a fast first pass.
+# ============================================================
+python scripts/run_training.py \
+    --n_steps        3000                                            \
+    --batch_size     4                                                \
+    --lr             1e-3                                             \
+    --lam            0.8                                              \
+    --noise_level    0.05                                             \
+    --scatterer_type mixed                                            \
+    --target_mode    mvdr                                             \
+    --M              32                                               \
+    --nx             64                                               \
+    --nz             64                                               \
+    --x_lim          16e-3                                            \
+    --z_start        10e-3                                            \
+    --z_end          42e-3                                            \
+    --checkpoint_dir Trained_Checkpoints/checkpoints_debug_able_mvdr_target
+
+echo "Job finished at $(date)"

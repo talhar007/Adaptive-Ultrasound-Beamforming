@@ -1,0 +1,68 @@
+#!/bin/bash
+# ============================================================
+# LSF job script: ABLE (receive-only) trained against GROUND TRUTH, at the
+# same debug-scale geometry as the other two debug runs
+# (config/submit_job.lsf, config/submit_job_able_mvdr_target.lsf) --
+# needed to have a like-for-like debug-scale baseline for demo_results.py
+# comparisons (the existing full-scale Trained_Checkpoints/checkpoints/
+# was trained at M=64 and won't load against M=32 debug checkpoints).
+#
+# Submit with:  bsub < config/submit_job_able_gt_debug.lsf
+# Monitor with: python scripts/status.py --checkpoint_dir Trained_Checkpoints/checkpoints_debug_able_gt_target
+# ============================================================
+
+# ---- Job identity ----
+#BSUB -J able_gt_target_debug
+#BSUB -o Trained_Checkpoints/checkpoints_debug_able_gt_target/lsf_%J.out
+#BSUB -e Trained_Checkpoints/checkpoints_debug_able_gt_target/lsf_%J.err
+
+# ---- Queue and resources ----
+#BSUB -q BatchGPU
+#BSUB -n 4
+#BSUB -R "rusage[mem=16000]"
+#BSUB -gpu "num=1:mode=exclusive_process:mps=no"
+#BSUB -W 72:00
+
+# ---- Notifications ----
+#BSUB -B
+#BSUB -N
+
+# ============================================================
+set -euo pipefail
+
+echo "Job  : $LSB_JOBID  on $(hostname) at $(date)"
+echo "Queue: $LSB_QUEUE"
+echo "Cores: $LSB_DJOB_NUMPROC"
+
+module purge
+module load cuda/v12.2
+
+source "$HOME/able_env/bin/activate"
+
+nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader || true
+
+PROJECT_DIR="$HOME/Documents/Research Project"
+cd "$PROJECT_DIR"
+mkdir -p Trained_Checkpoints/checkpoints_debug_able_gt_target
+
+# ============================================================
+# Receive-only MLP (no --learn_tx), target_mode=gt (the default) -- the
+# paper's original setup, at debug-scale geometry for comparability with
+# the other two debug checkpoints.
+# ============================================================
+python scripts/run_training.py \
+    --n_steps        3000                                          \
+    --batch_size     4                                              \
+    --lr             1e-3                                           \
+    --lam            0.8                                            \
+    --noise_level    0.05                                           \
+    --scatterer_type mixed                                          \
+    --M              32                                             \
+    --nx             64                                             \
+    --nz             64                                             \
+    --x_lim          16e-3                                          \
+    --z_start        10e-3                                          \
+    --z_end          42e-3                                          \
+    --checkpoint_dir Trained_Checkpoints/checkpoints_debug_able_gt_target
+
+echo "Job finished at $(date)"

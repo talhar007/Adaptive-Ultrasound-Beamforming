@@ -29,36 +29,55 @@ import torch
 @torch.no_grad()
 def mvdr_reconstruct(model, rf_data, L=None, diag_load=0.01,
                      eigen=False, eig_frac=0.2, smoothing=True,
-                     loading='eigen', kappa=1e3):
+                     loading='eigen', kappa=1e3, tau_tx=None):
     """MVDR reconstruction of every pixel, batched over the whole image.
 
     rf_data:   [B, M, T] simulated channel data
-    L:         subaperture length for spatial smoothing (default M//2,
-               the common choice; paper Table II uses L=32 for N=128)
+    L:         subaperture length for spatial smoothing (default M//4,
+               matching the paper's own ratio, Table II: L=32 for N=128).
+               An empirical sweep (scripts/tune_mvdr.py) confirmed the
+               previous M//2 default -- 50% of the aperture, double the
+               paper's ratio -- was the dominant cause of the smoothed
+               variant underperforming DAS (CNR went from -2.8 dB at
+               M//2 to +2.2 dB at M//4 on a 12-case sweep, M=64).
     smoothing: False = variant WITHOUT spatial smoothing: the full
                M-element aperture with a single snapshot, so R is the
                rank-1 outer product y y^T and all inversion stability
                comes from the diagonal loading. Maximum aperture (best
-               potential resolution), minimum robustness.
+               potential resolution), minimum robustness. Confirmed via
+               scripts/tune_mvdr.py that the 'eigen' default already
+               beats DAS handily here (contrary to the initial rank-1
+               hypothesis) -- no change needed for this variant.
     loading:   'eigen' (default) — eigenvalue-adaptive: per pixel choose
                the smallest eps that caps the condition number of
                R + eps*I at kappa:
                    eps = max(0, (lmax - kappa*lmin) / (kappa - 1)).
                Well-conditioned pixels get (almost) no loading — full
                adaptivity; ill-conditioned ones get exactly enough.
+               Works well for smoothing=False (MVDR-NS); for the
+               smoothed variant, callers should pass loading='trace'
+               explicitly (see scripts/demo_results.py) -- 'trace' won
+               the tune_mvdr.py sweep for smoothing=True, 'eigen' won it
+               for smoothing=False, so the single function default can't
+               serve both well simultaneously.
                'trace' — the paper's fixed rule eps = D * trace(R)
                (Eq. 10): scales with total energy (trace = sum of
                eigenvalues) but ignores the eigenvalue SPREAD.
     diag_load: D for loading='trace' (paper Table II: 0.1)
     kappa:     condition-number cap for loading='eigen'
     eigen:     apply the EBMV eigen-subspace projection (Eq. 11)
+    tau_tx:    [M] learned transmit firing delays in samples, or None.
+               Passed straight through to das_adjoint so MVDR can also
+               serve as a training target (or reconstruction operator)
+               for a joint-TX (ABLE++) acquisition without inheriting the
+               TX/RX delay-alignment bug fixed in ForwardModel.das_adjoint.
 
     returns: flat reconstructed image [B, nx*nz]
     """
-    _, pre_summed = model.das_adjoint(rf_data)              # [B, M*M, P]
+    _, pre_summed = model.das_adjoint(rf_data, tau_tx=tau_tx)  # [B, M*M, P]
     B, MM, P = pre_summed.shape
     M = int(MM ** 0.5)
-    L = M if not smoothing else (L or M // 2)
+    L = M if not smoothing else (L or M // 4)
     n_sub = M - L + 1
 
     # Receive-aperture response per pixel: sum tx contributions out of the

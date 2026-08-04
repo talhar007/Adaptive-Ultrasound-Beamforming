@@ -1,7 +1,26 @@
 """Demo: show ABLE++ results to your professor.
 
 Loads the trained MLP, generates a test case with known point scatterers,
-and compares DAS / FISTA / ABLE reconstructions side-by-side with metrics.
+and compares DAS / MVDR-NS / ABLE reconstructions side-by-side with
+metrics. FISTA and ABLE++S are intentionally excluded from this benchmark
+per advisor feedback (see able_plus_plus/baselines/fista.py for the
+FISTA implementation, kept for reference but not benchmarked here).
+
+The spatially-SMOOTHED MVDR variant is also excluded (advisor's explicit
+fallback: "if nothing works, use MVDR-NS"). Root cause, not a tuning
+failure: spatial smoothing estimates the covariance from L-element
+subapertures (L << M), and a shorter subaperture has fundamentally worse
+angular resolution -- more of every target's energy spills into
+surrounding background pixels, independent of how well-averaged the
+covariance estimate is. A background-leakage sweep over L=8..48 confirmed
+this is monotonic and structural (smaller subaperture always leaks more),
+not fixable by retuning L or the loading scheme -- only L=M (i.e.,
+literally becoming MVDR-NS, no smoothing) removes it. Smoothing exists to
+decorrelate COHERENT interference; this synthetic point-scatterer setup
+doesn't have that problem, so smoothing only pays its resolution cost here
+without earning its intended benefit. mvdr_reconstruct(smoothing=True)
+still exists in able_plus_plus/baselines/mvdr.py for reference/further
+investigation, just not reported in this benchmark.
 
 Run:
     python demo_results.py
@@ -28,25 +47,14 @@ from able_plus_plus import ForwardModel, ABLEMLP, apply_mlp
 from able_plus_plus.networks.able_mlp import pixel_positions
 from able_plus_plus.networks.tx_params import TxParams
 from able_plus_plus.baselines.das import das_reconstruct
-from able_plus_plus.baselines.fista import fista_reconstruct
 from able_plus_plus.baselines.mvdr import mvdr_reconstruct
 from able_plus_plus.data.simulate import random_scatterer_batch
 from able_plus_plus.evaluate import mae, psnr, smsle, scatterer_cnr
 from able_plus_plus.networks.losses import total_loss
 
-METHOD_KEYS  = ['das', 'fista', 'mvdr', 'mvdr_ns', 'able']
-METHOD_NAMES = {'das': 'DAS', 'fista': 'FISTA', 'mvdr': 'MVDR',
-                'mvdr_ns': 'MVDR-NS', 'able': 'ABLE', 'able_pp': 'ABLE++',
-                'able_pps': 'ABLE++S'}
-
-# Imaging grid extent, matching ForwardModel's defaults (x_lim=32e-3,
-# z_start=10e-3, z_end=74e-3, pitch=1e-3 m) — demo_results.py always
-# constructs ForwardModel without overriding these, so the display axes
-# below are accurate for every plot this script produces.
-X_LIM_MM   = 32.0
-Z_START_MM = 10.0
-Z_END_MM   = 74.0
-PITCH_MM   = 1.0
+METHOD_KEYS  = ['das', 'mvdr_ns', 'able']
+METHOD_NAMES = {'das': 'DAS', 'mvdr_ns': 'MVDR-NS', 'able': 'ABLE',
+                'able_mvdr': 'ABLE(mvdr)', 'able_pp': 'ABLE++'}
 
 # Additive noise level used everywhere in this script: rf += N(0,1) *
 # NOISE_LEVEL * rf.abs().max() (5% of the peak clean-signal amplitude).
@@ -59,13 +67,19 @@ def _imaging_info_lines(model, max_points, forward_name, elem_dropout=0.0):
     output (figure captions and the text report) states exactly what was
     reconstructed and under what conditions, not just the per-method
     metrics.
+
+    Derived from `model`'s own geometry (x_lim/z_start/z_end/pitch) rather
+    than fixed constants, so the captions stay correct for debug-scale runs
+    that override the default grid extent.
     """
     nx, nz = model.nx, model.nz
-    dx_mm = 2 * X_LIM_MM / (nx - 1)
-    dz_mm = (Z_END_MM - Z_START_MM) / (nz - 1)
-    line1 = (f"Image grid: {nx}x{nz} px  |  Lateral ±{X_LIM_MM:.0f} mm "
-            f"(Δx={dx_mm:.2f} mm)  |  Depth {Z_START_MM:.0f}-{Z_END_MM:.0f} mm "
-            f"(Δz={dz_mm:.2f} mm)  |  Array: M={model.M}, pitch={PITCH_MM:.1f} mm")
+    x_lim_mm, z_start_mm, z_end_mm, pitch_mm = (
+        model.x_lim * 1e3, model.z_start * 1e3, model.z_end * 1e3, model.pitch * 1e3)
+    dx_mm = 2 * x_lim_mm / (nx - 1)
+    dz_mm = (z_end_mm - z_start_mm) / (nz - 1)
+    line1 = (f"Image grid: {nx}x{nz} px  |  Lateral ±{x_lim_mm:.0f} mm "
+            f"(Δx={dx_mm:.2f} mm)  |  Depth {z_start_mm:.0f}-{z_end_mm:.0f} mm "
+            f"(Δz={dz_mm:.2f} mm)  |  Array: M={model.M}, pitch={pitch_mm:.1f} mm")
     line2 = (f"Physics: c={model.c:.0f} m/s, fc={model.fc/1e6:.1f} MHz, "
             f"fs={model.fs/1e6:.0f} MHz  |  Noise {NOISE_LEVEL*100:.0f}% of peak  |  "
             f"Max {max_points} scatterers/case  |  Forward: {forward_name}")
@@ -96,11 +110,11 @@ def load_network(ckpt_path, N, device, nx, nz):
 
 
 def to_common_scale(flat_img, nz, nx, eps=1e-8):
-    """THE one shared normalization for GT / DAS / FISTA / ABLE alike:
+    """THE one shared normalization for GT / DAS / MVDR / ABLE alike:
     flat [P] reconstruction -> [nz, nx] magnitude, peak-normalized to [0, 1].
 
     - abs() handles bipolar RF-domain outputs (DAS, ABLE) and is a no-op
-      for non-negative sparse outputs (GT, FISTA).
+      for non-negative sparse outputs (GT).
     - Peak normalization is correct for both sparse maps (>99% zero pixels,
       where percentile-based scales collapse to 0) and dense maps.
     - This matches the per-sample peak normalization inside smsle_loss, so
@@ -126,9 +140,10 @@ def to_bmode(norm_img):
 
 
 def _reconstruct_tx_variant(variant, gt, sim, model, elem_mask):
-    """Shared reconstruction path for any joint-TX+RX checkpoint (ABLE++,
-    ABLE++S, ...): acquire with its learned w_tx/tau_tx via simulate_tx,
-    then the ordinary frozen das_adjoint and its own receive MLP.
+    """Shared reconstruction path for a joint-TX+RX checkpoint (ABLE++):
+    acquire with its learned w_tx/tau_tx via simulate_tx, then the ordinary
+    frozen das_adjoint -- re-aligned to the SAME tau_tx the acquisition
+    used (see ForwardModel.das_adjoint) -- and its own receive MLP.
     variant: (mlp, tx, pos) tuple, as loaded by load_network + TxParams."""
     mlp_v, tx_v, pos_v = variant
     with torch.no_grad():
@@ -139,29 +154,36 @@ def _reconstruct_tx_variant(variant, gt, sim, model, elem_mask):
         if elem_mask is not None:
             rf_v = rf_v * elem_mask.view(1, -1, 1)
         rf_v = rf_v + torch.randn_like(rf_v) * NOISE_LEVEL * rf_v.abs().max()
-        _, pre_v = model.das_adjoint(rf_v)
+        _, pre_v = model.das_adjoint(rf_v, tau_tx=tau_tx)
         out, _, _ = apply_mlp(mlp_v, pre_v, pos=pos_v)
     return out
 
 
 def compare_methods(model, mlp, n_test_cases=3, device='cpu', max_points=20,
-                    pp=None, pps=None, sim_model=None, pos=None, elem_mask=None):
+                    pp=None, able_mvdr=None, able_mvdr_pos=None,
+                    sim_model=None, pos=None, elem_mask=None):
     """Run the full pipeline on test cases and collect metrics.
 
     For each test case:
       1. Generate random point scatterers (ground truth, <= max_points so
          results stay visually countable)
       2. Simulate RF data
-      3. Reconstruct using: DAS, FISTA, MVDR, ABLE (trained network)
+      3. Reconstruct using: DAS, MVDR-NS, ABLE (GT target), optionally ABLE
+         (MVDR-NS target, `able_mvdr`) and ABLE++ (`pp`)
       4. Compute MAE / PSNR / SMSLE / CNR per method, plus ABLE's loss
       5. Store results
+
+    able_mvdr/able_mvdr_pos: optional second receive-only ABLE network
+        (same architecture/interface as `mlp`/`pos`) -- e.g. the variant
+        trained with --target_mode mvdr (Section 7.5 of the notebook) --
+        evaluated here against the SAME actual ground truth as every other
+        method, so its column is directly comparable even though it never
+        saw ground truth during training.
     """
     results = []
 
     # Cycle deterministically through sparse → dense → clustered so every run
-    # includes all three field types. 'mixed' would pick randomly and can
-    # accidentally draw all-sparse batches, biasing MAE toward FISTA (whose L1
-    # prior is optimal for sparse but wrong for dense/clustered).
+    # includes all three field types.
     EVAL_TYPES = ['sparse', 'dense', 'clustered']
 
     for case_idx in range(n_test_cases):
@@ -188,12 +210,15 @@ def compare_methods(model, mlp, n_test_cases=3, device='cpu', max_points=20,
             rf_noisy = rf + torch.randn_like(rf) * NOISE_LEVEL * rf.abs().max()
         print(f"  RF data: {tuple(rf_noisy.shape)}")
 
-        # Baselines: uniform sum, sparse iterative, classical adaptive
-        # (with spatial smoothing / full-aperture single-snapshot).
+        # Baselines: uniform sum, classical adaptive (full-aperture single-
+        # snapshot, diagonal loading only). The spatially-smoothed MVDR
+        # variant is excluded here -- see module docstring: smoothing
+        # estimates the covariance from a shorter subaperture, which has
+        # structurally worse angular resolution and leaks more energy into
+        # the background regardless of tuning (confirmed: 82x more clutter
+        # above -40dB than MVDR-NS on a controlled point-scatterer test).
         recon = {
             'das':     das_reconstruct(model, rf_noisy),
-            'fista':   fista_reconstruct(model, rf_noisy),
-            'mvdr':    mvdr_reconstruct(model, rf_noisy),
             'mvdr_ns': mvdr_reconstruct(model, rf_noisy, smoothing=False),
         }
 
@@ -208,14 +233,18 @@ def compare_methods(model, mlp, n_test_cases=3, device='cpu', max_points=20,
         # on the transmit side — then the ordinary frozen das_adjoint and
         # its own receive MLP reconstruct. Same GT, same noise level.
         # Under elem_mask, the learned firing is masked by the same dead
-        # elements as everyone else. ABLE++S (pps) is the SAME mechanism
-        # with a smoothness-regularized TxParams checkpoint — kept as a
-        # separate column so the un-regularized ABLE++ stays available
-        # for comparison, not overwritten.
+        # elements as everyone else.
         if pp is not None:
             recon['able_pp'] = _reconstruct_tx_variant(pp, gt, sim, model, elem_mask)
-        if pps is not None:
-            recon['able_pps'] = _reconstruct_tx_variant(pps, gt, sim, model, elem_mask)
+
+        # ABLE trained against MVDR-NS output instead of ground truth
+        # (--target_mode mvdr) -- same receive-only reconstruction path as
+        # 'able', just a different checkpoint. Evaluated here against the
+        # real ground truth like everything else.
+        if able_mvdr is not None:
+            with torch.no_grad():
+                out, _, _ = apply_mlp(able_mvdr, pre_summed, pos=able_mvdr_pos)
+            recon['able_mvdr'] = out
 
         # One shared pipeline (magnitude + peak-normalized [0,1] scaling)
         # for GT and every method alike, so all metrics and the B-mode
@@ -288,7 +317,7 @@ def format_report(results, model, max_points, forward_name, elem_dropout=0.0):
         lines.append(header)
         for key in METHOD_KEYS:
             m = res['methods'][key]
-            mark = '  ← learned weights' if key in ('able', 'able_pp', 'able_pps') else ''
+            mark = '  ← learned weights' if key in ('able', 'able_mvdr', 'able_pp') else ''
             lines.append(f"  {METHOD_NAMES[key]:6s}  {m['mae']:9.6f}  {m['psnr']:9.2f}"
                          f"  {m['smsle']:9.4f}  {m['cnr']:9.2f}{mark}")
             for metric in summary[key]:
@@ -309,27 +338,28 @@ def format_report(results, model, max_points, forward_name, elem_dropout=0.0):
     lines.append("  - MAE / SMSLE: lower = better fidelity (linear / log domain, Eq. 16)")
     lines.append("  - PSNR / CNR : higher = better (signal fidelity / lesion contrast, Eq. 18)")
     lines.append("  - ABLE uses learned apodization weights (θ) trained on synthetic data")
-    lines.append("  - MVDR is the classical adaptive beamformer ABLE approximates")
-    lines.append("    (Luijten et al. Sec. II-C: spatial smoothing + diagonal loading)")
+    lines.append("  - MVDR-NS is the classical adaptive beamformer ABLE approximates")
+    lines.append("    (full aperture, single snapshot, diagonal loading only)")
     lines.append("  - B-mode images show typical ultrasound (dB-compressed, log scale)")
     lines.append("=" * 70)
 
     return "\n".join(lines)
 
 
-def _apply_mm_axes(ax, nz, nx, n_ticks=5):
-    """Label a B-mode panel's axes in mm, matching ForwardModel's imaging
-    grid (lateral +/-X_LIM_MM, depth Z_START_MM..Z_END_MM) — the way axes
-    are labeled in the paper's figures. Ticks are placed by explicit pixel
-    index rather than relying on imshow's extent parameter, so the
-    labeling is correct regardless of imshow's internal origin handling:
-    row 0 (displayed at the top, imshow's default origin='upper') is the
-    shallowest depth; row nz-1 (bottom) is the deepest.
+def _apply_mm_axes(ax, nz, nx, model, n_ticks=5):
+    """Label a B-mode panel's axes in mm, matching `model`'s own imaging
+    grid (lateral +/-model.x_lim, depth model.z_start..model.z_end) — the
+    way axes are labeled in the paper's figures. Ticks are placed by
+    explicit pixel index rather than relying on imshow's extent parameter,
+    so the labeling is correct regardless of imshow's internal origin
+    handling: row 0 (displayed at the top, imshow's default origin='upper')
+    is the shallowest depth; row nz-1 (bottom) is the deepest.
     """
+    x_lim_mm, z_start_mm, z_end_mm = model.x_lim * 1e3, model.z_start * 1e3, model.z_end * 1e3
     x_pos = np.linspace(0, nx - 1, n_ticks)
-    x_lab = np.linspace(-X_LIM_MM, X_LIM_MM, n_ticks)
+    x_lab = np.linspace(-x_lim_mm, x_lim_mm, n_ticks)
     z_pos = np.linspace(0, nz - 1, n_ticks)
-    z_lab = np.linspace(Z_START_MM, Z_END_MM, n_ticks)
+    z_lab = np.linspace(z_start_mm, z_end_mm, n_ticks)
     ax.set_xticks(x_pos)
     ax.set_xticklabels([f"{v:.0f}" for v in x_lab], fontsize=6)
     ax.set_yticks(z_pos)
@@ -351,7 +381,7 @@ def save_visualizations(results, output_dir='demo_output', dyn_range=60,
     raw maps and are unaffected by this display choice.
 
     Layout: panels wrap to a 2-row grid once there are more than 4 (e.g.
-    GT + 7 methods with both ABLE++ and ABLE++S = 8 panels -> 2 rows of 4),
+    GT + 5 methods with ABLE++ included = 6 panels -> 2 rows of 3),
     instead of one ever-widening row. Every panel gets numeric axis ticks
     in mm; the "Lateral (mm)" / "Depth (mm)" axis titles are shown only on
     the bottom row / left column to avoid repeating the same text 8 times.
@@ -407,7 +437,7 @@ def save_visualizations(results, output_dir='demo_output', dyn_range=60,
                              f"MAE {m['mae']:.4f} | PSNR {m['psnr']:.1f} dB\n"
                              f"SMSLE {m['smsle']:.3f} | CNR {m['cnr']:.1f} dB",
                              fontsize=9)
-            _apply_mm_axes(ax, nz, nx)
+            _apply_mm_axes(ax, nz, nx, model)
             if c == 0:
                 ax.set_ylabel("Depth (mm)", fontsize=8)
             if r == nrows - 1:
@@ -453,27 +483,43 @@ def main():
     parser = argparse.ArgumentParser(
         description='Demo ABLE++ pipeline: generate test case, compare methods, show metrics'
     )
-    parser.add_argument('--checkpoint', type=str, default='Trained_Checkpoints/checkpoints/checkpoint_latest.pt',
-                        help='path to trained model checkpoint')
+    parser.add_argument('--checkpoint', type=str,
+                        default='Trained_Checkpoints/checkpoints_fullscale_able_gt/checkpoint_best.pt',
+                        help='ABLE (ground-truth target) checkpoint (best-loss '
+                             'checkpoint by default, not just the last epoch)')
     parser.add_argument('--n_test', type=int, default=6,
                         help='number of test cases to run')
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--M', type=int, default=64)
     parser.add_argument('--nx', type=int, default=128)
     parser.add_argument('--nz', type=int, default=128)
+    parser.add_argument('--pitch', type=float, default=1e-3,
+                        help='element spacing in meters')
+    parser.add_argument('--x_lim', type=float, default=32e-3,
+                        help='lateral half-extent of the imaging grid in meters')
+    parser.add_argument('--z_start', type=float, default=10e-3,
+                        help='near-field depth of the imaging grid in meters')
+    parser.add_argument('--z_end', type=float, default=74e-3,
+                        help='far-field depth of the imaging grid in meters')
     parser.add_argument('--output_dir', type=str, default='Results/demo_output',
                         help='directory to save results')
     parser.add_argument('--max_points', type=int, default=20,
                         help='cap on scatterers per test case (keeps images '
                              'visually countable; dense cases become '
                              'max_points isolated points)')
-    parser.add_argument('--pp_checkpoint', type=str, default="Trained_Checkpoints/checkpoints_pp5/checkpoint_latest.pt",
-                        help='ABLE++ checkpoint (trained with --learn_tx) — '
-                             'adds a joint TX+RX column on the same cases')
-    parser.add_argument('--pps_checkpoint', type=str, default="Trained_Checkpoints/checkpoints_pp7_smooth2/checkpoint_latest.pt",
-                        help='ABLE++S checkpoint (--learn_tx --tx_smooth > 0) '
-                             '— adds a SEPARATE smoothness-regularized joint '
-                             'TX+RX column alongside (not instead of) ABLE++')
+    parser.add_argument('--pp_checkpoint', type=str,
+                        default="Trained_Checkpoints/checkpoints_fullscale_able_pp_fixed/checkpoint_best.pt",
+                        help='ABLE++ checkpoint (trained with --learn_tx, '
+                             'delay-alignment bug fixed) — adds a joint '
+                             'TX+RX column on the same cases')
+    parser.add_argument('--able_mvdr_checkpoint', type=str,
+                        default="Trained_Checkpoints/checkpoints_fullscale_able_mvdr/checkpoint_best.pt",
+                        help='ABLE checkpoint trained with --target_mode mvdr '
+                             '(against MVDR-NS output instead of ground '
+                             'truth) — adds a second receive-only ABLE '
+                             'column, evaluated against the real ground '
+                             'truth like every other method. Pass an empty '
+                             'string to skip it.')
     parser.add_argument('--forward', type=str, default='analytic',
                         choices=['analytic', 'deepwave'],
                         help='forward model that simulates the test RF data')
@@ -493,10 +539,12 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
-    # Reconstruction model is always the analytic one (DAS/FISTA/MVDR/ABLE
+    # Reconstruction model is always the analytic one (DAS/MVDR/ABLE
     # operators). With --forward deepwave the TEST DATA comes from the
     # wave-equation simulator instead — a physics-mismatch evaluation.
-    model = ForwardModel(M=args.M, nx=args.nx, nz=args.nz, device=device).to(device)
+    model = ForwardModel(M=args.M, pitch=args.pitch, nx=args.nx, nz=args.nz,
+                         x_lim=args.x_lim, z_start=args.z_start, z_end=args.z_end,
+                         device=device).to(device)
     sim_model = None
     if args.forward == 'deepwave':
         from able_plus_plus.physics.deepwave_model import DeepwaveForwardModel
@@ -535,28 +583,18 @@ def main():
         pp = (mlp_pp, tx, pos_pp)
         print(f"Loaded ABLE++ TX params from {args.pp_checkpoint}")
 
-    pps = None
-    if args.pps_checkpoint:
-        if not Path(args.pps_checkpoint).exists():
-            print(f"ERROR: ABLE++S checkpoint not found at {args.pps_checkpoint}")
+    able_mvdr_mlp = None
+    able_mvdr_pos = None
+    if args.able_mvdr_checkpoint:
+        if not Path(args.able_mvdr_checkpoint).exists():
+            print(f"ERROR: ABLE (MVDR target) checkpoint not found at {args.able_mvdr_checkpoint}")
             sys.exit(1)
-        mlp_pps, ckpt_pps, pos_pps = load_network(args.pps_checkpoint,
-                                                  N=args.M * args.M, device=device,
-                                                  nx=args.nx, nz=args.nz)
-        if 'tx_state' not in ckpt_pps:
-            print("ERROR: --pps_checkpoint has no tx_state — was it trained "
-                  "with --learn_tx?")
-            sys.exit(1)
-        tx_pps = TxParams(M=args.M, fc=model.fc, fs=model.fs,
-                          max_delay_periods=ckpt_pps.get('config', {})
-                                                    .get('tx_max_delay_periods', 1.0)
-                          ).to(device)
-        tx_pps.load_state_dict(ckpt_pps['tx_state'])
-        mlp_pps.eval()
-        METHOD_KEYS.append('able_pps')
-        pps = (mlp_pps, tx_pps, pos_pps)
-        print(f"Loaded ABLE++S TX params from {args.pps_checkpoint} "
-              f"(tx_smooth={ckpt_pps.get('config', {}).get('tx_smooth', 'unknown')})")
+        able_mvdr_mlp, _, able_mvdr_pos = load_network(args.able_mvdr_checkpoint,
+                                                       N=args.M * args.M, device=device,
+                                                       nx=args.nx, nz=args.nz)
+        able_mvdr_mlp.eval()
+        METHOD_KEYS.append('able_mvdr')
+        print(f"Loaded ABLE (MVDR-NS target) weights from {args.able_mvdr_checkpoint}")
 
     # Fixed dead-element mask for the damaged-aperture evaluation
     elem_mask = None
@@ -571,7 +609,8 @@ def main():
     print(f"\nRunning {args.n_test} test cases...")
     results = compare_methods(model, mlp, n_test_cases=args.n_test,
                               device=device, max_points=args.max_points,
-                              pp=pp, pps=pps, sim_model=sim_model, pos=pos,
+                              pp=pp, able_mvdr=able_mvdr_mlp, able_mvdr_pos=able_mvdr_pos,
+                              sim_model=sim_model, pos=pos,
                               elem_mask=elem_mask)
 
     # Generate report

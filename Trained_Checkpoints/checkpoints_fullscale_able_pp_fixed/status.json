@@ -1,0 +1,13 @@
+{
+  "epoch": 200,
+  "total_epochs": 200,
+  "loss": 1.227725,
+  "image_loss": 1.533831,
+  "unity_loss": 0.003277,
+  "weight_mag": 1.3028,
+  "val_loss": 1.202082,
+  "best_loss": 1.178185,
+  "elapsed_s": 11957.0,
+  "eta": "0:00:00",
+  "updated": "2026-08-04T23:14:29.716885"
+}

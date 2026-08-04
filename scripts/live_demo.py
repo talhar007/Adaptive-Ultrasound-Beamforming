@@ -5,7 +5,7 @@ pipeline to your professor. It:
 
   1. Builds a tiny model (M=8 array, 32×32 grid)
   2. Trains the MLP for 100 steps (takes ~30 seconds on GPU)
-  3. Generates test cases and compares DAS / FISTA / ABLE
+  3. Generates test cases and compares DAS / MVDR-NS / ABLE
   4. Displays results in the terminal
 
 Run:
@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from able_plus_plus import ForwardModel, ABLEMLP, apply_mlp
 from able_plus_plus.baselines.das import das_reconstruct
-from able_plus_plus.baselines.fista import fista_reconstruct
+from able_plus_plus.baselines.mvdr import mvdr_reconstruct
 from able_plus_plus.data.simulate import random_point_scatterers
 from able_plus_plus.evaluate import mae, envelope_db
 from able_plus_plus.networks.losses import total_loss
@@ -84,27 +84,27 @@ def demo_compare(model, mlp, device='cpu'):
 
             # Compare methods
             das = das_reconstruct(model, rf_noisy)
-            fista = fista_reconstruct(model, rf_noisy, n_iter=10)
+            mvdr_ns = mvdr_reconstruct(model, rf_noisy, smoothing=False)
 
             _, pre_summed = model.das_adjoint(rf_noisy)
             able, weights, _ = apply_mlp(mlp, pre_summed)
 
             das_mae = mae(das, gt)
-            fista_mae = mae(fista, gt)
+            mvdr_ns_mae = mae(mvdr_ns, gt)
             able_mae = mae(able, gt)
 
         results.append({
             'case': case_idx + 1,
             'n_scatter': n_scatter,
             'das_mae': das_mae,
-            'fista_mae': fista_mae,
+            'mvdr_ns_mae': mvdr_ns_mae,
             'able_mae': able_mae,
         })
 
         print(f"    Test {case_idx + 1}: {n_scatter} scatterers")
-        print(f"      DAS  MAE: {das_mae:.6f}")
-        print(f"      FISTA MAE: {fista_mae:.6f}")
-        print(f"      ABLE  MAE: {able_mae:.6f}  ← trained weights")
+        print(f"      DAS      MAE: {das_mae:.6f}")
+        print(f"      MVDR-NS  MAE: {mvdr_ns_mae:.6f}")
+        print(f"      ABLE     MAE: {able_mae:.6f}  ← trained weights")
         print()
 
     return results
@@ -138,18 +138,18 @@ def print_demo_results(results):
 
     print("  Baseline Beamformers (no learning):")
     print("    • DAS (Delay-and-Sum):  uniform weights, simple but effective")
-    print("    • FISTA:                sparse reconstruction, iterative solver\n")
+    print("    • MVDR-NS:              adaptive, diagonal-loading only, no spatial smoothing\n")
     print("  Learned Beamformer:")
     print("    • ABLE:                 neural adaptive apodization (trained 100 steps)\n")
 
     avg_das = sum(r['das_mae'] for r in results) / len(results)
-    avg_fista = sum(r['fista_mae'] for r in results) / len(results)
+    avg_mvdr_ns = sum(r['mvdr_ns_mae'] for r in results) / len(results)
     avg_able = sum(r['able_mae'] for r in results) / len(results)
 
     print(f"  Average MAE (Mean Absolute Error):")
-    print(f"    DAS  : {avg_das:.6f}")
-    print(f"    FISTA: {avg_fista:.6f}")
-    print(f"    ABLE : {avg_able:.6f}")
+    print(f"    DAS    : {avg_das:.6f}")
+    print(f"    MVDR-NS: {avg_mvdr_ns:.6f}")
+    print(f"    ABLE   : {avg_able:.6f}")
     print()
 
     if avg_able < avg_das:

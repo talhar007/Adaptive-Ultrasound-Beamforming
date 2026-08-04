@@ -41,6 +41,8 @@ class ForwardModel(nn.Module):
         super().__init__()
         self.M, self.c, self.fc, self.fs = M, c, fc, fs
         self.nx, self.nz = nx, nz
+        self.pitch = pitch
+        self.x_lim, self.z_start, self.z_end = x_lim, z_start, z_end
 
         x_vec, z_vec, grid_X, grid_Z = build_grids(x_lim, z_start, z_end, nx, nz, device)
         elem_x = linear_array(M, pitch, device)   # [M, 1]
@@ -189,8 +191,26 @@ class ForwardModel(nn.Module):
     # ------------------------------------------------------------------
     # 2. DAS adjoint  (delay-and-align, two outputs)
     # ------------------------------------------------------------------
-    def das_adjoint(self, rf_data):
+    def das_adjoint(self, rf_data, tau_tx=None):
         """rf_data: [B, M_rx, T]
+        tau_tx: [M] learned transmit firing delays in samples, or None.
+
+            Whenever the RF was acquired via simulate_tx(..., tau_tx=tau_tx),
+            the true echo from element pair (rx, tx) arrives at
+            geo_delay[rx,tx] + tau_tx[tx], not geo_delay[rx,tx] alone. The
+            frozen idx_floor/idx_ceil/w_floor/w_ceil buffers (built once in
+            __init__ from geo_delay only) sample off that peak by
+            tau_tx[tx] samples whenever tau_tx is nonzero -- passing the
+            SAME tau_tx used at acquisition time here re-aligns the gather
+            exactly the way a real system's receive beamformer uses its own
+            known firing delays. With tau_tx=None this is byte-identical to
+            the previous geometry-only behavior (receive-only ABLE path).
+
+            Only timing is corrected here -- do NOT also thread w_tx
+            through: transmit amplitude is already baked into rf_data by
+            simulate_tx, so re-applying it to the gain buffer would double
+            it.
+
         returns:
             das_image        [B, nx*nz]   -- standard DAS (uniform weights)
             pre_summed       [B, M*M, nx*nz] -- per channel-pair contributions
@@ -203,7 +223,8 @@ class ForwardModel(nn.Module):
         uses to predict apodization weights (professor_meeting_context.md).
         """
         B  = rf_data.shape[0]
-        MM = self.M * self.M
+        M  = self.M
+        MM = M * M
 
         # Pad rf_data into the full buffer and replicate each rx signal
         # across all M assumed tx positions (index order: rx*M + tx)
@@ -214,10 +235,32 @@ class ForwardModel(nn.Module):
                    .reshape(B, MM, -1)
         )
 
-        val_f = torch.gather(v, 2, self.idx_floor.unsqueeze(0).expand(B, -1, -1))
-        val_c = torch.gather(v, 2, self.idx_ceil.unsqueeze(0).expand(B, -1, -1))
+        if tau_tx is None:
+            idx_floor, idx_ceil = self.idx_floor, self.idx_ceil
+            w_floor, w_ceil = self.w_floor, self.w_ceil
+        else:
+            # Recompute the gather geometry per call, mirroring simulate_tx's
+            # dynamic delay math exactly -- including its (idx_f >= 0)
+            # validity check. tau_tx can push the effective delay negative,
+            # unlike geo_delay alone (always >= 0), so the __init__ buffers'
+            # idx_c < buf-only mask is NOT reusable here: it would silently
+            # corrupt negative-delay elements via clamp-to-zero instead of
+            # zeroing their contribution.
+            buf = self.buffer_len
+            t = (self.geo_delay.view(M, M, -1) + tau_tx.view(1, M, 1)).reshape(MM, -1)
+            idx_f = t.detach().floor().long()
+            idx_c = idx_f + 1
+            frac  = t - idx_f.float()                 # d(frac)/d(tau) = 1
+            valid = ((idx_f >= 0) & (idx_c < buf)).float()
+            w_floor = (1.0 - frac) * self.gain * valid
+            w_ceil  =        frac  * self.gain * valid
+            idx_floor = idx_f.clamp(0, buf - 1)
+            idx_ceil  = idx_c.clamp(0, buf - 1)
 
-        pre_summed = val_f * self.w_floor.unsqueeze(0) + val_c * self.w_ceil.unsqueeze(0)
+        val_f = torch.gather(v, 2, idx_floor.unsqueeze(0).expand(B, -1, -1))
+        val_c = torch.gather(v, 2, idx_ceil.unsqueeze(0).expand(B, -1, -1))
+
+        pre_summed = val_f * w_floor.unsqueeze(0) + val_c * w_ceil.unsqueeze(0)
         # pre_summed: [B, M*M, nx*nz]
 
         das_image = pre_summed.sum(dim=1)   # uniform weights -> DAS  [B, nx*nz]

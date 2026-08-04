@@ -3,22 +3,21 @@
 Run this at any time from any login node to see the current state of your
 running (or most-recently-finished) training job:
 
-    python status.py                       # one-shot snapshot
-    watch -n 30 python status.py           # refresh every 30 seconds live
+    python scripts/status.py                                       # Trained_Checkpoints/checkpoints/
+    python scripts/status.py --checkpoint_dir Trained_Checkpoints/checkpoints_debug_das_adjoint_fix
+    watch -n 30 python scripts/status.py --checkpoint_dir <dir>     # refresh every 30 seconds live
 
-Reads  Trained_Checkpoints/checkpoints/status.json  (written by run_training.py
-every --log_interval steps) and  Trained_Checkpoints/checkpoints/training.log
-(last few lines).
+Reads <checkpoint_dir>/status.json (written by run_training.py every epoch)
+and <checkpoint_dir>/training.log (last few lines).
 """
+import argparse
 import json
 import sys
 from datetime import datetime
 from pathlib import Path
 
 
-STATUS_FILE = Path('Trained_Checkpoints/checkpoints/status.json')
-LOG_FILE    = Path('Trained_Checkpoints/checkpoints/training.log')
-STALE_WARN  = 120   # seconds before we warn the job may have died
+STALE_WARN = 120   # seconds before we warn the job may have died
 
 
 def bar(current, total, width=40):
@@ -33,35 +32,47 @@ def fmt_time(seconds):
 
 
 def main():
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('--checkpoint_dir', type=str, default='Trained_Checkpoints/checkpoints',
+                   help='directory a run_training.py job is writing to')
+    args = p.parse_args()
+
+    ckpt_dir    = Path(args.checkpoint_dir)
+    status_file = ckpt_dir / 'status.json'
+    log_file    = ckpt_dir / 'training.log'
+
     # ---- status.json ----
-    if not STATUS_FILE.exists():
-        print(f"No status file found at {STATUS_FILE}")
-        print("Either training hasn't started yet, or the checkpoint_dir differs.")
+    if not status_file.exists():
+        print(f"No status file found at {status_file}")
+        print("Either training hasn't started yet, or --checkpoint_dir is wrong.")
         sys.exit(0)
 
-    with open(STATUS_FILE) as f:
+    with open(status_file) as f:
         s = json.load(f)
 
     updated = datetime.fromisoformat(s['updated'])
     age     = (datetime.now() - updated).total_seconds()
 
-    stage    = s.get('stage', '?')
-    s_step   = s.get('stage_step', 0)
-    s_total  = s.get('stage_total', 1)
-    pct      = 100 * s_step / max(s_total, 1)
-    progress = bar(s_step, s_total)
+    epoch       = s.get('epoch', 0)
+    total_epoch = s.get('total_epochs', 1)
+    pct         = 100 * epoch / max(total_epoch, 1)
+    progress    = bar(epoch, total_epoch)
 
     print()
     print("=" * 60)
-    print("  ABLE++ Training Status")
+    print(f"  ABLE++ Training Status  ({ckpt_dir})")
     print("=" * 60)
-    print(f"  Stage   : {stage.upper()}")
-    print(f"  Progress: {progress} {pct:5.1f}%  ({s_step}/{s_total} steps)")
+    print(f"  Progress: {progress} {pct:5.1f}%  (epoch {epoch}/{total_epoch})")
     print()
-    print(f"  Loss (total)  : {s.get('loss',        float('nan')):.6f}")
-    print(f"  Loss (image)  : {s.get('image_loss',  float('nan')):.6f}")
-    print(f"  Loss (unity)  : {s.get('unity_loss',  float('nan')):.6f}")
-    print(f"  Best so far   : {s.get('best_loss',   float('nan')):.6f}")
+    print(f"  Loss (total)    : {s.get('loss',        float('nan')):.6f}")
+    print(f"  Loss (image)    : {s.get('image_loss',  float('nan')):.6f}")
+    print(f"  Loss (unity)    : {s.get('unity_loss',  float('nan')):.6f}")
+    print(f"  Weight magnitude: {s.get('weight_mag',  float('nan')):.4f}"
+          "  (diagnostic -- unbounded canceling weights would show up here)")
+    val_loss = s.get('val_loss')
+    print(f"  Val loss        : {val_loss:.6f}" if val_loss is not None else "  Val loss        : n/a")
+    print(f"  Best so far     : {s.get('best_loss',   float('nan')):.6f}")
     print()
     print(f"  Elapsed : {fmt_time(s.get('elapsed_s', 0))}")
     print(f"  ETA     : {s.get('eta', 'unknown')}")
@@ -74,8 +85,8 @@ def main():
         print(f"  Last update : {updated.strftime('%Y-%m-%d %H:%M:%S')}  ({age_str})")
 
     # ---- tail of log file ----
-    if LOG_FILE.exists():
-        lines = LOG_FILE.read_text().splitlines()
+    if log_file.exists():
+        lines = log_file.read_text().splitlines()
         tail  = lines[-8:] if len(lines) >= 8 else lines
         print()
         print("  --- last log lines ---")

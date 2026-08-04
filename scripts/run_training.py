@@ -27,9 +27,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from able_plus_plus import ForwardModel, ABLEMLP
 from able_plus_plus.networks.tx_params import TxParams
+from able_plus_plus.baselines.mvdr import mvdr_reconstruct
 from able_plus_plus.data.simulate import make_batch, random_scatterer_batch
 from able_plus_plus.networks.able_mlp import apply_mlp, pixel_positions
-from able_plus_plus.networks.losses import total_loss, tx_smoothness_loss
+from able_plus_plus.networks.losses import total_loss
 
 
 # ============================================================
@@ -131,6 +132,13 @@ def acquire(model, gt_images, cfg, tx=None, noise=None):
                     is zeroed). Trains the model to image with a damaged /
                     sparse aperture, where a learned firing strategy can
                     genuinely outperform uniform DAS.
+
+    Returns (rf, tau_tx_used): tau_tx_used is the ACTUAL per-element firing
+    delay baked into rf by simulate_tx (post domain_rand jitter), or None
+    if no TX delay was applied at all (plain simulate() path). Callers must
+    pass this into das_adjoint(tau_tx=...) so the reconstruction re-aligns
+    on the same delays the acquisition used -- omitting it reproduces the
+    TX/RX misalignment bug fixed in ForwardModel.das_adjoint.
     """
     dev = gt_images.device
     M = model.M
@@ -166,7 +174,42 @@ def acquire(model, gt_images, cfg, tx=None, noise=None):
         rf = rf * mask.view(1, M, 1)
     if noise is None:
         noise = torch.randn_like(rf)
-    return rf + noise * cfg['noise_level'] * rf.detach().abs().max()
+    rf = rf + noise * cfg['noise_level'] * rf.detach().abs().max()
+    return rf, tau_tx
+
+
+def resolve_target(cfg, model, rf_data, tau_tx_used, gt_images):
+    """Training target, per --target_mode.
+
+    'gt'   (default): the exact scatterer map -- the paper's setup, but an
+           idealization no real acquisition can match (ground truth is
+           unavailable with real data, and chasing it is a plausible driver
+           of hallucinated scatterers -- see total_loss's lam_bg).
+    'mvdr': MVDR-NS (diagonal-loading only, no spatial smoothing -- the
+           variant with by far the best fidelity of any classical baseline
+           per scripts/tune_mvdr.py) reconstructed from the SAME rf_data /
+           tau_tx as the network's own input, detached from the graph.
+           Mimics training against the best available reference when no
+           ground truth exists, per the professor's feedback.
+
+           Uses loading='trace' (not the function's 'eigen' default)
+           deliberately: this gets recomputed EVERY training step (unlike
+           a one-off eval/demo call), and 'eigen' requires a full
+           eigendecomposition of a 64x64 matrix per pixel per batch item
+           -- measured at ~13.4s/call at M=64/128x128/batch=4, versus
+           ~130ms/call for 'trace' (~100x faster, no eigendecomposition,
+           just a batched linear solve). At 100 steps/epoch, 'eigen' here
+           made training take an estimated 1+ day instead of ~1 hour.
+           'trace' is still comfortably ahead of DAS in fidelity (see
+           scripts/tune_mvdr.py) -- this trade is training-speed-only and
+           does not affect the reported MVDR-NS benchmark column, which
+           still uses the function's normal 'eigen' default in
+           demo_results.py (computed once per test case, not per step).
+    """
+    if cfg.get('target_mode', 'gt') == 'mvdr':
+        return mvdr_reconstruct(model, rf_data, smoothing=False, loading='trace',
+                                diag_load=0.1, tau_tx=tau_tx_used).detach()
+    return gt_images.detach()
 
 
 def train_step(model, mlp, opt, cfg, device, tx=None, pos=None):
@@ -182,25 +225,34 @@ def train_step(model, mlp, opt, cfg, device, tx=None, pos=None):
 
     gt_images = random_scatterer_batch(cfg['batch_size'], model.nx, model.nz,
                                        scatterer_type=cfg['scatterer_type'],
-                                       device=device)
-    rf_data = acquire(model, gt_images, cfg, tx=tx)
+                                       device=device,
+                                       max_points=cfg.get('max_points'))
+    rf_data, tau_tx_used = acquire(model, gt_images, cfg, tx=tx)
 
-    _, pre_summed = model.das_adjoint(rf_data)          # frozen reconstruction
+    # frozen reconstruction, delay-aligned to whatever tau_tx the acquisition
+    # actually used (None in receive-only mode -- see das_adjoint docstring)
+    _, pre_summed = model.das_adjoint(rf_data, tau_tx=tau_tx_used)
     p_recon, weights, _ = apply_mlp(mlp, pre_summed, pos=pos)
-    target = gt_images.detach()
+    target = resolve_target(cfg, model, rf_data, tau_tx_used, gt_images)
 
     loss, l_img, l_unity = total_loss(p_recon, target, weights,
                                       lam=cfg['lam'],
                                       lam_bg=cfg.get('lam_bg', 0.0))
-    if tx is not None and cfg.get('tx_smooth', 0.0) > 0:
-        w_tx, tau_tx = tx()
-        loss = loss + cfg['tx_smooth'] * tx_smoothness_loss(w_tx, tau_tx, tx.max_delay)
     loss.backward()
     params = list(mlp.parameters()) + (list(tx.parameters()) if tx is not None else [])
     torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
     opt.step()
 
-    return float(loss), float(l_img), float(l_unity)
+    # Diagnostic only (not part of the loss): mean per-pixel weight-vector
+    # magnitude. unity_gain_penalty only constrains weights.sum(-1) == 1;
+    # nothing bounds individual weight magnitude, so a network chasing an
+    # unreachable target could still learn large canceling weights that
+    # amplify noise into hallucinated scatterers while the sum constraint
+    # stays satisfied. Logged to history/status.json to check this directly
+    # instead of inferring it from the (already near-zero) unity penalty.
+    weight_mag = float(weights.detach().norm(dim=-1).mean())
+
+    return float(loss), float(l_img), float(l_unity), weight_mag
 
 
 def eval_on_fixed_batch(model, mlp, fixed_data, cfg, device, tx=None, pos=None):
@@ -216,19 +268,18 @@ def eval_on_fixed_batch(model, mlp, fixed_data, cfg, device, tx=None, pos=None):
     val_cfg = dict(cfg, domain_rand=False, elem_dropout=0.0)
     with torch.no_grad():
         if tx is None:
-            rf = rf_static
+            rf, tau_tx_used = rf_static, None
         else:
-            rf = acquire(model, gt_images, val_cfg, tx=tx, noise=unit_noise)
-        _, pre_summed = model.das_adjoint(rf)
+            rf, tau_tx_used = acquire(model, gt_images, val_cfg, tx=tx, noise=unit_noise)
+        _, pre_summed = model.das_adjoint(rf, tau_tx=tau_tx_used)
         p_recon, weights, _ = apply_mlp(mlp, pre_summed, pos=pos)
-        loss, l_img, l_unity = total_loss(p_recon, gt_images, weights,
+        target = resolve_target(cfg, model, rf, tau_tx_used, gt_images)
+        loss, l_img, l_unity = total_loss(p_recon, target, weights,
                                           lam=cfg['lam'],
                                           lam_bg=cfg.get('lam_bg', 0.0))
-        if tx is not None and cfg.get('tx_smooth', 0.0) > 0:
-            w_tx, tau_tx = tx()
-            loss = loss + cfg['tx_smooth'] * tx_smoothness_loss(w_tx, tau_tx, tx.max_delay)
+        weight_mag = float(weights.norm(dim=-1).mean())
 
-    return float(loss), float(l_img), float(l_unity)
+    return float(loss), float(l_img), float(l_unity), weight_mag
 
 
 # ============================================================
@@ -298,6 +349,7 @@ def run_training(n_steps, model, mlp, opt, cfg, device,
 
     if out_dir is None:
         out_dir = Path(ckpt_path).parent
+    best_ckpt_path = out_dir / 'checkpoint_best.pt'
 
     total_epochs = n_epochs
     lr0 = cfg['lr']
@@ -316,28 +368,41 @@ def run_training(n_steps, model, mlp, opt, cfg, device,
         epoch_losses = []
         epoch_img_losses = []
         epoch_unity_losses = []
+        epoch_weight_mags = []
 
         # Train for one epoch
         for step_in_epoch in range(epoch_size):
-            l_total, l_img, l_unity = train_step(model, mlp, opt, cfg, device, tx=tx, pos=pos)
+            l_total, l_img, l_unity, w_mag = train_step(model, mlp, opt, cfg, device, tx=tx, pos=pos)
             epoch_losses.append(l_total)
             epoch_img_losses.append(l_img)
             epoch_unity_losses.append(l_unity)
+            epoch_weight_mags.append(w_mag)
 
         # Compute epoch averages
         avg_loss = sum(epoch_losses) / len(epoch_losses)
         avg_img_loss = sum(epoch_img_losses) / len(epoch_img_losses)
         avg_unity_loss = sum(epoch_unity_losses) / len(epoch_unity_losses)
+        avg_weight_mag = sum(epoch_weight_mags) / len(epoch_weight_mags)
 
         # Evaluate on fixed validation data
         val_loss = None
         val_img = None
         val_unity = None
+        val_weight_mag = None
         if fixed_val_data is not None:
-            val_loss, val_img, val_unity = eval_on_fixed_batch(model, mlp, fixed_val_data, cfg, device, tx=tx, pos=pos)
+            val_loss, val_img, val_unity, val_weight_mag = eval_on_fixed_batch(model, mlp, fixed_val_data, cfg, device, tx=tx, pos=pos)
 
-        if avg_loss < best_loss:
-            best_loss = avg_loss
+        # Track the best-LOSS checkpoint separately from checkpoint_latest.pt
+        # (which is unconditional, kept purely so an interrupted run can
+        # resume). Prefer validation loss when available -- it measures
+        # generalization rather than this epoch's own training batch -- and
+        # persist the weights immediately on improvement, so the final
+        # deliverable is the best model seen, not whatever the last epoch
+        # happened to produce.
+        compare_loss = val_loss if val_loss is not None else avg_loss
+        is_best = compare_loss < best_loss
+        if is_best:
+            best_loss = compare_loss
 
         elapsed = time.time() - t0
 
@@ -347,9 +412,11 @@ def run_training(n_steps, model, mlp, opt, cfg, device,
             'loss':            avg_loss,
             'image_loss':      avg_img_loss,
             'unity_loss':      avg_unity_loss,
+            'weight_mag':      avg_weight_mag,
             'val_loss':        val_loss,
             'val_image_loss':  val_img,
             'val_unity_loss':  val_unity,
+            'val_weight_mag':  val_weight_mag,
         })
 
         # Sanity check for loss anomalies
@@ -361,6 +428,7 @@ def run_training(n_steps, model, mlp, opt, cfg, device,
         logging.info(
             f"Epoch {start_epoch + epoch:>{len(str(n_epochs))}}/{n_epochs}  "
             f"loss={avg_loss:.4f}  img={avg_img_loss:.4f}  unity={avg_unity_loss:.6f}  "
+            f"wmag={avg_weight_mag:.3f}  "
             f"best={best_loss:.4f}{val_str}  lr={lr:.2e}  ETA={eta_str(elapsed, epoch, remaining)}"
         )
 
@@ -382,6 +450,7 @@ def run_training(n_steps, model, mlp, opt, cfg, device,
             loss=round(avg_loss, 6),
             image_loss=round(avg_img_loss, 6),
             unity_loss=round(avg_unity_loss, 6),
+            weight_mag=round(avg_weight_mag, 4),
             val_loss=round(val_loss, 6) if val_loss is not None else None,
             best_loss=round(best_loss, 6),
             elapsed_s=round(elapsed, 1),
@@ -389,9 +458,17 @@ def run_training(n_steps, model, mlp, opt, cfg, device,
             updated=datetime.now().isoformat(),
         )
 
-        # Checkpoint every 2 epochs
+        # Checkpoint every 2 epochs (unconditional -- resume continuity)
         if epoch % 2 == 0 or epoch == remaining:
             save_checkpoint(ckpt_path, start_epoch + epoch,
+                            model, mlp, opt, history, cfg, best_loss, tx=tx)
+
+        # Best-loss checkpoint (separate file): saved immediately on every
+        # improvement, regardless of the every-2-epochs cadence above, so
+        # the model actually used for demos/benchmarks is the best one seen,
+        # not whichever epoch happened to land on an even boundary.
+        if is_best:
+            save_checkpoint(best_ckpt_path, start_epoch + epoch,
                             model, mlp, opt, history, cfg, best_loss, tx=tx)
 
     return history, best_loss
@@ -412,9 +489,29 @@ def parse_args():
     p.add_argument('--scatterer_type',  type=str,   default='mixed',
                    choices=['sparse', 'dense', 'clustered', 'mixed'],
                    help='training data diversity (mixed = random per sample)')
+    p.add_argument('--max_points',      type=int,   default=None,
+                   help='fix every training phantom to ~max_points '
+                        'scatterers instead of a randomized count per '
+                        'sample (default: randomized, the original '
+                        'behavior). Test generalization to other counts '
+                        'at eval time with demo_results.py --max_points; '
+                        'revert to the default if it hurts')
     p.add_argument('--M',               type=int,   default=64)
     p.add_argument('--nx',              type=int,   default=128)
     p.add_argument('--nz',              type=int,   default=128)
+    p.add_argument('--pitch',           type=float, default=1e-3,
+                   help='element spacing in meters (leave untouched when '
+                        'only halving M/nx/nz for a faster debug run)')
+    p.add_argument('--x_lim',           type=float, default=32e-3,
+                   help='lateral half-extent of the imaging grid in meters '
+                        '(+/-x_lim); halve alongside nx to keep pixel '
+                        'spacing dx constant when reducing resolution')
+    p.add_argument('--z_start',         type=float, default=10e-3,
+                   help='near-field depth of the imaging grid in meters')
+    p.add_argument('--z_end',           type=float, default=74e-3,
+                   help='far-field depth of the imaging grid in meters; '
+                        'adjust alongside nz to keep pixel spacing dz '
+                        'constant when reducing resolution')
     p.add_argument('--epoch_size',      type=int,   default=100,
                    help='training steps per epoch')
     p.add_argument('--checkpoint_dir',  type=str,   default='Trained_Checkpoints/checkpoints')
@@ -444,7 +541,19 @@ def parse_args():
     p.add_argument('--lam_bg',          type=float, default=0.0,
                    help='weight of the linear-domain background-power '
                         'loss term (aligns training with CNR/PSNR); '
-                        '0 = paper objective unchanged')
+                        '0 = paper objective unchanged. Requires '
+                        '--target_mode gt: background_power() hard-masks on '
+                        'the ground-truth scatterer map, which does not '
+                        'exist for an MVDR target (never exactly zero '
+                        'anywhere)')
+    p.add_argument('--target_mode',     type=str,   default='gt',
+                   choices=['gt', 'mvdr'],
+                   help="'gt' (default, the paper's setup): train against "
+                        'the exact ground-truth scatterer map. \'mvdr\': '
+                        'train against MVDR-NS reconstructed from the same '
+                        'RF -- mimics the real-data setting where ground '
+                        'truth is unavailable (professor feedback); '
+                        'incompatible with --lam_bg > 0')
     p.add_argument('--domain_rand',     action='store_true',
                    help='per-batch transmit-side jitter (element gains '
                         '±5%%, firing times ±0.5 smp) for physics-mismatch '
@@ -453,12 +562,6 @@ def parse_args():
                    help='per-batch probability of each element being dead '
                         '(neither transmits nor receives) — damaged/sparse '
                         'aperture training')
-    p.add_argument('--tx_smooth',       type=float, default=0.0,
-                   help='weight of the total-variation smoothness penalty '
-                        'on w_tx/tau_tx across element index — discourages '
-                        'the jagged, high-sidelobe aperture weighting an '
-                        'unconstrained per-element TX solution tends to '
-                        'find (0 = off, the ABLE++ behavior without this fix)')
     # NOTE: training always uses the analytic forward model. Deepwave is a
     # TEST-time physics-mismatch simulator (demo_results.py --forward
     # deepwave), not a training data generator.
@@ -467,6 +570,14 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.target_mode == 'mvdr' and args.lam_bg > 0:
+        raise SystemExit(
+            "--target_mode mvdr is incompatible with --lam_bg > 0: "
+            "background_power() hard-masks on the ground-truth scatterer "
+            "map (pixels where it is exactly zero), which is meaningless "
+            "for a dense MVDR target image that is essentially never "
+            "exactly zero anywhere. Use --lam_bg 0, or --target_mode gt."
+        )
     out_dir = Path(args.checkpoint_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -483,17 +594,32 @@ def main():
         'lam':                  args.lam,
         'noise_level':          args.noise_level,
         'scatterer_type':       args.scatterer_type,
+        'max_points':           args.max_points,
         'epoch_size':           args.epoch_size,
         'learn_tx':             args.learn_tx,
         'tx_max_delay_periods': args.tx_max_delay_periods,
         'pos_enc':              args.pos_enc,
         'lam_bg':               args.lam_bg,
+        'target_mode':          args.target_mode,
         'domain_rand':          args.domain_rand,
         'elem_dropout':         args.elem_dropout,
-        'tx_smooth':            args.tx_smooth,
+        # Physical setup -- not used by the training loop itself, but
+        # round-tripped through the checkpoint so a saved/resumed run always
+        # records exactly what geometry produced it (previously omitted,
+        # relying entirely on whatever --M/--nx/--nz the caller happens to
+        # pass on resume).
+        'M':                    args.M,
+        'nx':                   args.nx,
+        'nz':                   args.nz,
+        'pitch':                args.pitch,
+        'x_lim':                args.x_lim,
+        'z_start':              args.z_start,
+        'z_end':                args.z_end,
     }
 
-    model = ForwardModel(M=args.M, nx=args.nx, nz=args.nz, device=device).to(device)
+    model = ForwardModel(M=args.M, pitch=args.pitch, nx=args.nx, nz=args.nz,
+                         x_lim=args.x_lim, z_start=args.z_start, z_end=args.z_end,
+                         device=device).to(device)
     mlp = ABLEMLP(N=args.M * args.M, dropout=args.dropout,
                   pos_dim=2 if args.pos_enc else 0).to(device)
     pos = pixel_positions(args.nx, args.nz, device) if args.pos_enc else None
@@ -507,15 +633,15 @@ def main():
     n_mlp = sum(p.numel() for p in mlp.parameters())
     logging.info(f"ForwardModel: M={args.M}, nx={args.nx}, nz={args.nz}")
     logging.info(f"ABLEMLP: input={args.M*args.M}  params={n_mlp:,}")
+    logging.info(f"Training target: {args.target_mode}"
+                 + ("  (ground truth, the paper's setup)" if args.target_mode == 'gt'
+                    else "  (MVDR-NS reconstruction, no ground truth used)"))
     if tx is not None:
         n_tx = sum(p.numel() for p in tx.parameters())
         logging.info(f"TxParams: global per-element, random init, |tau| < "
                      f"{args.tx_max_delay_periods:g} period(s) "
                      f"(={tx.max_delay:.1f} samples), params={n_tx:,} "
                      f"(joint ABLE++ mode, transmit-side)")
-        if args.tx_smooth > 0:
-            logging.info(f"TX smoothness penalty: lam_tx_smooth={args.tx_smooth:g} "
-                         f"(ABLE++S mode)")
 
     params = list(mlp.parameters()) + (list(tx.parameters()) if tx else [])
     opt = torch.optim.Adam(params, lr=args.lr)
@@ -541,6 +667,7 @@ def main():
         noise_level=cfg['noise_level'],
         scatterer_type='mixed',
         device=device,
+        max_points=cfg.get('max_points'),
     )
     fixed_val_data = (gt_val, rf_val, torch.randn_like(rf_val))
     logging.info("✓ Fixed validation data ready (8 samples)")

@@ -1,15 +1,24 @@
 #!/bin/bash
 # ============================================================
 # LSF job script for ABLE++ training on the Makalu cluster
-# Submit with:  bsub < submit_job.lsf
-# Monitor with: python status.py
+# Submit with:  bsub < config/submit_job.lsf
+# Monitor with: python scripts/status.py
 # Kill with:    bkill <jobid>
+#
+# NOTE (updated for the das_adjoint TX/RX delay-alignment fix): this is a
+# DEBUG-SCALE validation run -- halved M and grid resolution (with x_lim/
+# z_end also halved to keep pixel spacing dx/dz unchanged, per the
+# implementation plan) so a first read on whether the fix visibly reduces
+# ABLE++ clutter is fast to get. Once validated, resubmit with
+# --M 64 --nx 128 --nz 128 --x_lim 32e-3 --z_end 74e-3 (the defaults, so
+# those four flags can simply be dropped) for the full-scale run, and a
+# fresh --checkpoint_dir so it doesn't collide with this debug run.
 # ============================================================
 
 # ---- Job identity ----
-#BSUB -J able_plus_plus
-#BSUB -o checkpoints/lsf_%J.out
-#BSUB -e checkpoints/lsf_%J.err
+#BSUB -J able_pp_das_adjoint_fix_debug
+#BSUB -o Trained_Checkpoints/checkpoints_debug_das_adjoint_fix/lsf_%J.out
+#BSUB -e Trained_Checkpoints/checkpoints_debug_das_adjoint_fix/lsf_%J.err
 
 # ---- Queue and resources ----
 #BSUB -q BatchGPU
@@ -34,32 +43,33 @@ module load cuda/v12.2
 
 source "$HOME/able_env/bin/activate"
 
-nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
+nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader || true
 
 PROJECT_DIR="$HOME/Documents/Research Project"
 cd "$PROJECT_DIR"
-mkdir -p checkpoints
+mkdir -p Trained_Checkpoints/checkpoints_debug_das_adjoint_fix
 
 # ============================================================
-# Launch training — MLP-only, forward model is fixed physics
-#   --n_steps 5000        : total training steps
-#   --batch_size 4        : increase if GPU VRAM allows
-#   --scatterer_type mixed: diverse data for generalization
-#   --M 64                : array elements (supervisor notebook)
-#   --nx 128 --nz 128     : imaging grid
+# Launch training — MLP + TX params jointly (ABLE++, --learn_tx), the
+# variant the das_adjoint tau_tx fix actually changes. Debug-scale physics
+# (halved M/grid, pixel spacing preserved) for a fast first validation
+# pass; --n_steps is also reduced accordingly (30 epochs @ epoch_size 100)
+# since the goal here is "did the fix help", not a final trained model.
 # ============================================================
-python run_training.py \
-    --n_steps        5000       \
-    --batch_size     4          \
-    --lr             1e-3       \
-    --lam            0.8        \
-    --noise_level    0.05       \
-    --scatterer_type mixed      \
-    --M              64         \
-    --nx             128        \
-    --nz             128        \
-    --log_interval   20         \
-    --ckpt_interval  200        \
-    --checkpoint_dir checkpoints
+python scripts/run_training.py \
+    --n_steps        3000                                       \
+    --batch_size     4                                           \
+    --lr             1e-3                                        \
+    --lam            0.8                                         \
+    --noise_level    0.05                                        \
+    --scatterer_type mixed                                       \
+    --learn_tx                                                   \
+    --M              32                                          \
+    --nx             64                                          \
+    --nz             64                                          \
+    --x_lim          16e-3                                       \
+    --z_start        10e-3                                       \
+    --z_end          42e-3                                       \
+    --checkpoint_dir Trained_Checkpoints/checkpoints_debug_das_adjoint_fix
 
 echo "Job finished at $(date)"

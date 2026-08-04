@@ -121,19 +121,24 @@ def random_scatterer_batch(batch_size, nx, nz, scatterer_type='mixed', device='c
     return images
 
 
-def make_batch(model, batch_size, noise_level=0.05, scatterer_type='mixed', device='cpu'):
+def make_batch(model, batch_size, noise_level=0.05, scatterer_type='mixed',
+               device='cpu', max_points=None):
     """Draw ground-truth scatterer maps, simulate RF data, add noise.
 
     The forward model runs under torch.no_grad() — data generation is a
     fixed physics step; only the subsequent MLP reconstruction accumulates
     gradients.
 
+    max_points: see random_scatterer_batch (None = randomized count, the
+        default; an int fixes every map to ~max_points scatterers).
+
     Returns:
         gt_images [B, nx*nz]   ground-truth reflectivity
         rf_data   [B, M, T]    simulated channel data with noise
     """
     gt_images = random_scatterer_batch(batch_size, model.nx, model.nz,
-                                       scatterer_type=scatterer_type, device=device)
+                                       scatterer_type=scatterer_type, device=device,
+                                       max_points=max_points)
     with torch.no_grad():
         rf_clean = model.simulate(gt_images)
         noise    = torch.randn_like(rf_clean) * noise_level * rf_clean.abs().max()
