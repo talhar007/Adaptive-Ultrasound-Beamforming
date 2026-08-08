@@ -1,0 +1,62 @@
+#!/bin/bash
+# ============================================================
+# LSF job script: ABLE++ (joint TX+RX), full scale, WITH the das_adjoint
+# delay-alignment fix, using an L1 (not L2) background-power loss term.
+#
+# This is a controlled ablation testing the professor's suspicion that the
+# LOSS FUNCTION is a driver of ABLE++'s higher SMSLE / residual clutter
+# vs. plain ABLE. Measured evidence: ABLE++ (pp5, L2 background penalty)
+# has ~15x more background pixels above 1% of peak than ABLE, concentrated
+# in a small number of localized spots -- exactly the failure mode L2
+# (not sparsity-promoting) permits and L1 should suppress harder.
+#
+# Identical hyperparameters to config/submit_job_able_pp_fullscale.lsf
+# (the current best ABLE++ checkpoint) except --bg_l1. This is a SEPARATE
+# technique/checkpoint -- does NOT touch checkpoints_fullscale_able_pp_fixed
+# or New_results/.
+#
+# Submit with:  bsub < config/submit_job_able_pp_l1bg.lsf
+# Monitor with: python scripts/status.py --checkpoint_dir Trained_Checkpoints/checkpoints_fullscale_able_pp_l1bg
+# ============================================================
+
+#BSUB -J able_pp_l1bg
+#BSUB -o Trained_Checkpoints/checkpoints_fullscale_able_pp_l1bg/lsf_%J.out
+#BSUB -e Trained_Checkpoints/checkpoints_fullscale_able_pp_l1bg/lsf_%J.err
+
+#BSUB -q BatchGPU
+#BSUB -n 4
+#BSUB -R "rusage[mem=16000]"
+#BSUB -gpu "num=1:mode=exclusive_process:mps=no"
+#BSUB -W 72:00
+
+#BSUB -B
+#BSUB -N
+
+set -euo pipefail
+
+echo "Job  : $LSB_JOBID  on $(hostname) at $(date)"
+module purge
+module load cuda/v12.2
+source "$HOME/able_env/bin/activate"
+nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader || true
+
+PROJECT_DIR="$HOME/Documents/Research Project"
+cd "$PROJECT_DIR"
+mkdir -p Trained_Checkpoints/checkpoints_fullscale_able_pp_l1bg
+
+python scripts/run_training.py \
+    --n_steps                20000      \
+    --batch_size              4          \
+    --lr                      1e-3       \
+    --lam                     0.8        \
+    --noise_level              0.05       \
+    --scatterer_type           mixed      \
+    --learn_tx                            \
+    --tx_max_delay_periods    0.5        \
+    --pos_enc                             \
+    --lam_bg                  0.1        \
+    --bg_l1                               \
+    --domain_rand                         \
+    --checkpoint_dir Trained_Checkpoints/checkpoints_fullscale_able_pp_l1bg
+
+echo "Job finished at $(date)"
